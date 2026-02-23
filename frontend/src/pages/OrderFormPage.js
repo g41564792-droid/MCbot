@@ -25,8 +25,6 @@ import {
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const TELEGRAM_BOT_URL = 'https://t.me/OlWait_MC_Bot';
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-
 // Installation types
 const INSTALLATION_TYPES = [
   { id: 'проемная_наружный', label: 'Проемная (наружный)', group: 'Проемная' },
