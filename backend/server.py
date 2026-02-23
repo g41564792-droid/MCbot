@@ -1017,14 +1017,12 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                     else:
                         text = "<b>📋 Ваши заказы:</b>\n\n"
                         for o in orders:
-                            text += f"{STATUS_EMOJI.get(o['status'], '❓')} <b>#{o['id'][:8]}</b> - {STATUS_NAMES.get(o['status'], o['status'])}\n   💰 {o['total_price']} ₽\n\n"
+                            on = o.get('order_number', f"#{o['id'][:8]}")
+                            text += f"{STATUS_EMOJI.get(o['status'], '❓')} <b>{on}</b> - {STATUS_NAMES.get(o['status'], o['status'])}\n   💰 {o['total_price']} ₽\n\n"
                 await edit_message_text(chat_id, message_id, text, reply_markup=build_main_menu_keyboard())
             
-            elif cbd == "contact":
-                await edit_message_text(chat_id, message_id, "<b>📞 Контакты</b>\n\nНапишите нам в этот чат.\nМы работаем: Пн-Пт 9:00-18:00", reply_markup=build_main_menu_keyboard())
-            
             elif cbd == "help":
-                await edit_message_text(chat_id, message_id, "<b>❓ Помощь</b>\n\n<b>Как заказать:</b>\n1. Новый заказ\n2. Тип сетки\n3. Полотно\n4. Размеры\n5. Цвет и крепление\n6. Подтвердить\n\n<b>Размеры:</b> 150-3000 мм", reply_markup=build_main_menu_keyboard())
+                await edit_message_text(chat_id, message_id, "<b>❓ Помощь</b>\n\n<b>Как заказать:</b>\n1. Новый заказ\n2. Тип сетки\n3. Полотно\n4. Размеры (ширина высота кол-во)\n5. Цвет и крепление\n6. Подтвердить\n\n<b>Размеры:</b> 150-3000 мм\n<b>Кол-во:</b> 1-30 шт\n\n<b>Отследить заказ:</b> кнопка 🔍", reply_markup=build_main_menu_keyboard())
             
             return {"ok": True}
         
