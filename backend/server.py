@@ -1041,7 +1041,7 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                 await send_telegram_message(chat_id, f"<b>Добро пожаловать, {name}!</b>\n\n🪟 Сервис заказа москитных сеток\n\nВыберите действие:", reply_markup=build_main_menu_keyboard())
             elif text in ["/help", "/cancel"]:
                 await clear_tg_session(chat_id)
-                await send_telegram_message(chat_id, "Команды: /start /orders /help", reply_markup=build_main_menu_keyboard())
+                await send_telegram_message(chat_id, "Команды: /start /orders /help /track", reply_markup=build_main_menu_keyboard())
             elif text == "/orders":
                 user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
                 if user:
@@ -1049,47 +1049,81 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                     if orders:
                         t = "<b>📋 Заказы:</b>\n\n"
                         for o in orders:
-                            t += f"{STATUS_EMOJI.get(o['status'], '❓')} #{o['id'][:8]} - {STATUS_NAMES.get(o['status'], o['status'])}\n   {o['total_price']} ₽\n\n"
+                            on = o.get('order_number', f"#{o['id'][:8]}")
+                            t += f"{STATUS_EMOJI.get(o['status'], '❓')} {on} - {STATUS_NAMES.get(o['status'], o['status'])}\n   {o['total_price']} ₽\n\n"
                         await send_telegram_message(chat_id, t, reply_markup=build_main_menu_keyboard())
                     else:
                         await send_telegram_message(chat_id, "Заказов нет", reply_markup=build_main_menu_keyboard())
                 else:
                     await send_telegram_message(chat_id, "Заказов нет", reply_markup=build_main_menu_keyboard())
+            elif text == "/track":
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_ORDER_TRACK})
+                await send_telegram_message(chat_id, "🔍 <b>Отследить заказ</b>\n\nВведите номер:\n<i>Например: МС-0001</i>", reply_markup=build_cancel_keyboard())
             
-            elif state == TelegramOrderState.AWAITING_WIDTH:
-                try:
-                    w = int(text.strip())
-                    if 150 <= w <= 3000:
-                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_HEIGHT, "order_data.width": w})
-                        await send_telegram_message(chat_id, f"<b>Ширина:</b> {w} мм\n\n📏 <b>Введите ВЫСОТУ</b> (150-3000)", reply_markup=build_cancel_keyboard())
-                    else:
-                        await send_telegram_message(chat_id, "❌ 150-3000 мм", reply_markup=build_cancel_keyboard())
-                except:
-                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
+            elif state == TelegramOrderState.AWAITING_ORDER_TRACK:
+                order_num = text.strip().upper()
+                if not order_num.startswith("МС-"):
+                    order_num = f"МС-{order_num.replace('МС', '').replace('-', '').zfill(4)}"
+                
+                order = await get_order_by_number(order_num)
+                if order:
+                    on = order.get('order_number', order_num)
+                    status = STATUS_NAMES.get(order['status'], order['status'])
+                    emoji = STATUS_EMOJI.get(order['status'], '❓')
+                    
+                    history_text = ""
+                    if order.get('status_history'):
+                        history_text = "\n\n<b>История:</b>\n"
+                        for h in order['status_history'][-5:]:
+                            hs = STATUS_NAMES.get(h['status'], h['status'])
+                            dt = h['changed_at'][:10]
+                            history_text += f"• {hs} ({dt})\n"
+                    
+                    t = f"{emoji} <b>Заказ {on}</b>\n\n"
+                    t += f"<b>Статус:</b> {status}\n"
+                    t += f"<b>Сумма:</b> {order['total_price']} ₽\n"
+                    t += f"<b>Позиций:</b> {len(order['items'])}\n"
+                    t += f"<b>Дата:</b> {order['desired_date']}"
+                    t += history_text
+                    
+                    await clear_tg_session(chat_id)
+                    await send_telegram_message(chat_id, t, reply_markup=build_main_menu_keyboard())
+                else:
+                    await send_telegram_message(chat_id, f"❌ Заказ {order_num} не найден\n\nПроверьте номер и попробуйте снова:", reply_markup=build_cancel_keyboard())
             
-            elif state == TelegramOrderState.AWAITING_HEIGHT:
+            elif state == TelegramOrderState.AWAITING_DIMENSIONS:
+                # Parse: width height [quantity]
+                parts = text.strip().split()
                 try:
-                    h = int(text.strip())
-                    if 150 <= h <= 3000:
-                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_QUANTITY, "order_data.height": h})
-                        await send_telegram_message(chat_id, f"<b>Высота:</b> {h} мм\n\n🔢 <b>Количество</b> (1-30)", reply_markup=build_cancel_keyboard())
+                    if len(parts) < 2:
+                        await send_telegram_message(chat_id, "❌ Введите: ширина высота [кол-во]\n\n<i>Например: 800 1200 2</i>", reply_markup=build_cancel_keyboard())
                     else:
-                        await send_telegram_message(chat_id, "❌ 150-3000 мм", reply_markup=build_cancel_keyboard())
-                except:
-                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
-            
-            elif state == TelegramOrderState.AWAITING_QUANTITY:
-                try:
-                    q = int(text.strip())
-                    if 1 <= q <= 30:
-                        session = await get_tg_session(chat_id)
-                        itype = session.get("order_data", {}).get("installation_type", "")
-                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_COLOR, "order_data.quantity": q})
-                        await send_telegram_message(chat_id, f"<b>Кол-во:</b> {q}\n\n🎨 Выберите цвет:", reply_markup=build_color_keyboard(itype))
-                    else:
-                        await send_telegram_message(chat_id, "❌ 1-30 шт", reply_markup=build_cancel_keyboard())
-                except:
-                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
+                        w = int(parts[0])
+                        h = int(parts[1])
+                        q = int(parts[2]) if len(parts) > 2 else 1
+                        
+                        errors = []
+                        if w < 150 or w > 3000:
+                            errors.append(f"Ширина {w} - должна быть 150-3000")
+                        if h < 150 or h > 3000:
+                            errors.append(f"Высота {h} - должна быть 150-3000")
+                        if q < 1 or q > 30:
+                            errors.append(f"Количество {q} - должно быть 1-30")
+                        
+                        if errors:
+                            await send_telegram_message(chat_id, "❌ " + "\n".join(errors), reply_markup=build_cancel_keyboard())
+                        else:
+                            session = await get_tg_session(chat_id)
+                            itype = session.get("order_data", {}).get("installation_type", "")
+                            await update_tg_session(chat_id, {
+                                "state": TelegramOrderState.AWAITING_COLOR,
+                                "order_data.width": w,
+                                "order_data.height": h,
+                                "order_data.quantity": q
+                            })
+                            await send_telegram_message(chat_id, f"<b>Размер:</b> {w}×{h} мм, {q} шт\n\n🎨 Выберите цвет:", reply_markup=build_color_keyboard(itype))
+                except ValueError:
+                    await send_telegram_message(chat_id, "❌ Введите числа: ширина высота [кол-во]\n\n<i>Например: 800 1200 2</i>", reply_markup=build_cancel_keyboard())
             
             elif state == TelegramOrderState.AWAITING_RAL:
                 ral = text.strip()
