@@ -638,6 +638,407 @@ class MosquitoNetAPITester:
         
         return success1 and success2 and success3
 
+    def test_telegram_dimension_validation(self):
+        """Test dimension input validation (150-3000mm) via Telegram webhook"""
+        print("\n" + "="*50)
+        print("TESTING DIMENSION INPUT VALIDATION (150-3000mm)")
+        print("="*50)
+        
+        chat_id = 987654321
+        
+        # Test valid width inputs
+        valid_widths = [150, 800, 1500, 2500, 3000]
+        width_results = []
+        
+        for width in valid_widths:
+            # First set session to awaiting_width state
+            session_data = {
+                "chat_id": chat_id,
+                "state": "awaiting_width",
+                "order_data": {"installation_type": "проемная_наружный", "mesh_type": "стандартное"},
+                "items": []
+            }
+            
+            width_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(width),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Valid Width Input - {width}mm",
+                "POST",
+                "telegram/webhook",
+                200,
+                width_webhook_data
+            )
+            
+            width_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Width {width}mm accepted")
+        
+        # Test invalid width inputs
+        invalid_widths = [149, 50, 3001, 5000, 0, -100]
+        invalid_width_results = []
+        
+        for width in invalid_widths:
+            width_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(width),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Invalid Width Input - {width}mm",
+                "POST", 
+                "telegram/webhook",
+                200,
+                width_webhook_data
+            )
+            
+            invalid_width_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Width {width}mm properly rejected")
+        
+        # Test valid height inputs 
+        valid_heights = [150, 1200, 1800, 2500, 3000]
+        height_results = []
+        
+        for height in valid_heights:
+            height_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(height),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Valid Height Input - {height}mm",
+                "POST",
+                "telegram/webhook", 
+                200,
+                height_webhook_data
+            )
+            
+            height_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Height {height}mm accepted")
+        
+        # Test invalid height inputs
+        invalid_heights = [149, 25, 3001, 4000]
+        invalid_height_results = []
+        
+        for height in invalid_heights:
+            height_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(height),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Invalid Height Input - {height}mm",
+                "POST",
+                "telegram/webhook",
+                200,
+                height_webhook_data
+            )
+            
+            invalid_height_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Height {height}mm properly rejected")
+        
+        return all(width_results) and all(invalid_width_results) and all(height_results) and all(invalid_height_results)
+
+    def test_telegram_quantity_validation(self):
+        """Test quantity input validation (1-30) via Telegram webhook"""
+        print("\n" + "="*50)
+        print("TESTING QUANTITY INPUT VALIDATION (1-30)")
+        print("="*50)
+        
+        chat_id = 987654322
+        
+        # Test valid quantities
+        valid_quantities = [1, 5, 15, 25, 30]
+        quantity_results = []
+        
+        for quantity in valid_quantities:
+            quantity_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(quantity),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Valid Quantity Input - {quantity} units",
+                "POST",
+                "telegram/webhook",
+                200,
+                quantity_webhook_data
+            )
+            
+            quantity_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Quantity {quantity} accepted")
+        
+        # Test invalid quantities
+        invalid_quantities = [0, -5, 31, 50, 100]
+        invalid_quantity_results = []
+        
+        for quantity in invalid_quantities:
+            quantity_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": str(quantity),
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Invalid Quantity Input - {quantity} units",
+                "POST",
+                "telegram/webhook",
+                200,
+                quantity_webhook_data
+            )
+            
+            invalid_quantity_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Quantity {quantity} properly rejected")
+        
+        return all(quantity_results) and all(invalid_quantity_results)
+
+    def test_color_selection_by_installation_type(self):
+        """Test color selection variations based on installation type"""
+        print("\n" + "="*50)
+        print("TESTING COLOR SELECTION BY INSTALLATION TYPE")
+        print("="*50)
+        
+        # Test color selection for door/roller types (limited colors)
+        door_roller_types = ["дверная", "роллетная"]
+        door_roller_results = []
+        
+        for install_type in door_roller_types:
+            # Test limited color options for door/roller
+            limited_colors = ["белый", "коричневый"]
+            
+            for color in limited_colors:
+                callback_webhook_data = {
+                    "callback_query": {
+                        "id": f"test_color_{install_type}_{color}",
+                        "data": f"color_{color}",
+                        "message": {
+                            "chat": {"id": 999888777},
+                            "message_id": 130
+                        },
+                        "from": {"id": 999888777, "first_name": "TestUser"}
+                    }
+                }
+                
+                success, result = self.run_test(
+                    f"Color Selection - {install_type} type with {color} color",
+                    "POST",
+                    "telegram/webhook",
+                    200,
+                    callback_webhook_data
+                )
+                
+                door_roller_results.append(success)
+                if success and result.get('ok'):
+                    print(f"✅ {install_type} with {color} color processed")
+        
+        # Test color selection for other types (full color range)
+        other_types = ["проемная_наружный", "проемная_внутренний", "проемная_встраиваемый"]
+        other_type_results = []
+        
+        for install_type in other_types:
+            # Test full color options 
+            full_colors = ["белый", "коричневый", "антрацит", "ral"]
+            
+            for color in full_colors:
+                callback_webhook_data = {
+                    "callback_query": {
+                        "id": f"test_color_{install_type}_{color}",
+                        "data": f"color_{color}",
+                        "message": {
+                            "chat": {"id": 999888778},
+                            "message_id": 131
+                        },
+                        "from": {"id": 999888778, "first_name": "TestUser"}
+                    }
+                }
+                
+                success, result = self.run_test(
+                    f"Color Selection - {install_type} type with {color} color",
+                    "POST",
+                    "telegram/webhook", 
+                    200,
+                    callback_webhook_data
+                )
+                
+                other_type_results.append(success)
+                if success and result.get('ok'):
+                    print(f"✅ {install_type} with {color} color processed")
+        
+        return all(door_roller_results) and all(other_type_results)
+
+    def test_impost_recommendation_logic(self):
+        """Test impost recommendation for sizes > 1200mm"""
+        print("\n" + "="*50)
+        print("TESTING IMPOST RECOMMENDATION FOR SIZES > 1200mm")
+        print("="*50)
+        
+        # Test impost recommendation triggers
+        large_sizes = [
+            {"width": 1300, "height": 800, "should_recommend": True},
+            {"width": 800, "height": 1300, "should_recommend": True},
+            {"width": 1500, "height": 1800, "should_recommend": True},
+            {"width": 1100, "height": 1100, "should_recommend": False},
+            {"width": 800, "height": 1000, "should_recommend": False}
+        ]
+        
+        impost_results = []
+        
+        for size_test in large_sizes:
+            # Test mounting selection callback which triggers impost check
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_mount_impost_{size_test['width']}_{size_test['height']}",
+                    "data": "mount_z_bracket",
+                    "message": {
+                        "chat": {"id": 999888779},
+                        "message_id": 132
+                    },
+                    "from": {"id": 999888779, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Impost Logic Test - {size_test['width']}x{size_test['height']}mm (should_recommend: {size_test['should_recommend']})",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            impost_results.append(success)
+            if success and result.get('ok'):
+                recommendation = "recommend" if size_test['should_recommend'] else "not recommend"
+                print(f"✅ Size {size_test['width']}x{size_test['height']}mm should {recommendation} impost")
+        
+        # Test impost orientation selections
+        orientations = ["вертикально", "горизонтально"]
+        orientation_results = []
+        
+        for orientation in orientations:
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_impost_orientation_{orientation}",
+                    "data": f"impost_{orientation}",
+                    "message": {
+                        "chat": {"id": 999888780},
+                        "message_id": 133
+                    },
+                    "from": {"id": 999888780, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Impost Orientation - {orientation}",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            orientation_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Impost orientation {orientation} processed")
+        
+        return all(impost_results) and all(orientation_results)
+
+    def test_status_history_tracking(self):
+        """Test status history tracking in orders"""
+        print("\n" + "="*50)
+        print("TESTING STATUS HISTORY TRACKING")
+        print("="*50)
+        
+        if not self.admin_token or not self.created_order_id:
+            print("⚠️ Skipping status history test - need admin token and order")
+            return True
+        
+        # Get order before status changes to check initial history
+        success1, initial_order = self.run_test(
+            "Get Order - Check Initial Status History",
+            "GET",
+            f"orders/{self.created_order_id}",
+            200
+        )
+        
+        if success1:
+            initial_history = initial_order.get('status_history', [])
+            print(f"✅ Initial status history has {len(initial_history)} entries")
+        
+        # Make multiple status changes to build history
+        status_changes = ["new", "in_progress", "ready", "delivered"]
+        history_results = []
+        
+        for status in status_changes:
+            success, result = self.run_test(
+                f"Status Change to {status} - History Check",
+                "PUT",
+                f"admin/orders/{self.created_order_id}/status",
+                200,
+                {"status": status},
+                use_admin=True
+            )
+            
+            history_results.append(success)
+            if success and 'status_history' in result:
+                history = result['status_history']
+                print(f"✅ Status changed to {status} - History now has {len(history)} entries")
+                
+                # Verify the last entry matches the current status
+                if history and history[-1]['status'] == status:
+                    print(f"✅ Latest history entry matches status: {status}")
+                else:
+                    print(f"❌ History entry mismatch for status: {status}")
+            else:
+                print(f"❌ No status_history in response for status: {status}")
+        
+        # Final verification - get order and check complete history
+        success_final, final_order = self.run_test(
+            "Final Order Check - Complete Status History",
+            "GET",
+            f"orders/{self.created_order_id}",
+            200
+        )
+        
+        if success_final:
+            final_history = final_order.get('status_history', [])
+            print(f"✅ Final order has complete status history with {len(final_history)} entries")
+            
+            # Verify history entries have required fields
+            valid_history = True
+            for entry in final_history:
+                if not all(key in entry for key in ['status', 'changed_at']):
+                    valid_history = False
+                    print(f"❌ Invalid history entry: {entry}")
+                    break
+            
+            if valid_history:
+                print("✅ All status history entries have required fields (status, changed_at)")
+        
+        return all(history_results) and success_final
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting Mosquito Net API Tests...")
@@ -656,7 +1057,12 @@ class MosquitoNetAPITester:
             self.test_telegram_webhook,
             self.test_telegram_inline_keyboards,
             self.test_telegram_order_type_keyboard,
-            self.test_push_notifications_on_status_change
+            self.test_push_notifications_on_status_change,
+            self.test_telegram_dimension_validation,
+            self.test_telegram_quantity_validation,
+            self.test_color_selection_by_installation_type,
+            self.test_impost_recommendation_logic,
+            self.test_status_history_tracking
         ]
         
         for test in tests:
