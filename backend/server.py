@@ -697,22 +697,28 @@ async def telegram_webhook(request: Request):
             message = data["message"]
             chat_id = message["chat"]["id"]
             text = message.get("text", "")
+            user_first_name = message.get("from", {}).get("first_name", "")
             
             if text == "/start":
                 webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
                 response_text = f"""
-<b>Добро пожаловать в сервис заказа москитных сеток!</b>
+<b>Добро пожаловать, {user_first_name}!</b>
 
-Для оформления заказа перейдите на наш сайт:
-{webapp_url}
+Сервис заказа москитных сеток к вашим услугам.
 
-Вы можете:
-• Создать заказ с точными размерами
-• Выбрать тип установки и материалы
-• Отслеживать статус заказа
+<b>Как сделать заказ:</b>
+1️⃣ Перейдите на сайт: {webapp_url}
+2️⃣ Зарегистрируйтесь, указав ваш Telegram ID
+3️⃣ Заполните форму заказа
+4️⃣ Получайте уведомления о статусе
 
-Ваш Telegram ID: <code>{chat_id}</code>
-Укажите его при регистрации для получения уведомлений.
+<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
+(скопируйте и укажите при регистрации)
+
+<b>Команды:</b>
+/start - Начать работу
+/orders - Мои заказы
+/help - Справка
 """
                 await send_telegram_message(chat_id, response_text)
             
@@ -720,11 +726,80 @@ async def telegram_webhook(request: Request):
                 response_text = """
 <b>Справка по боту</b>
 
+<b>Доступные команды:</b>
 /start - Начать работу
+/orders - Проверить статус заказов
 /help - Показать справку
 
-Для заказа москитных сеток используйте веб-форму на нашем сайте.
-После регистрации вы будете получать уведомления о статусе заказа.
+<b>Типы москитных сеток:</b>
+• Проёмная (наружная, внутренняя, встраиваемая)
+• Дверная
+• Роллетная
+
+<b>Типы полотна:</b>
+• Стандартное
+• Антипыль
+• Антимошка
+• Антикошка
+
+Для оформления заказа используйте веб-форму на нашем сайте.
+"""
+                await send_telegram_message(chat_id, response_text)
+            
+            elif text == "/orders":
+                # Find user by telegram_id
+                user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
+                if not user:
+                    response_text = """
+<b>Аккаунт не найден</b>
+
+Для просмотра заказов необходимо зарегистрироваться на сайте и указать ваш Telegram ID.
+
+<b>Ваш Telegram ID:</b> <code>{}</code>
+""".format(chat_id)
+                else:
+                    orders = await db.orders.find(
+                        {"user_id": user["id"]}, 
+                        {"_id": 0}
+                    ).sort("created_at", -1).limit(5).to_list(5)
+                    
+                    if not orders:
+                        response_text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ на нашем сайте!"
+                    else:
+                        status_emoji = {
+                            "new": "🆕",
+                            "in_progress": "🔧",
+                            "ready": "✅",
+                            "delivered": "📦",
+                            "cancelled": "❌"
+                        }
+                        status_names = {
+                            "new": "Новый",
+                            "in_progress": "В работе",
+                            "ready": "Готов",
+                            "delivered": "Выдан",
+                            "cancelled": "Отменён"
+                        }
+                        
+                        response_text = f"<b>Ваши заказы ({user['name']}):</b>\n\n"
+                        for order in orders:
+                            emoji = status_emoji.get(order["status"], "❓")
+                            status = status_names.get(order["status"], order["status"])
+                            items_count = len(order["items"])
+                            response_text += f"{emoji} <b>#{order['id'][:8]}</b>\n"
+                            response_text += f"   Позиций: {items_count}, Сумма: {order['total_price']} ₽\n"
+                            response_text += f"   Статус: {status}\n"
+                            response_text += f"   Дата: {order['desired_date']}\n\n"
+                
+                await send_telegram_message(chat_id, response_text)
+            
+            else:
+                # Unknown command
+                response_text = """
+Не понял команду. Используйте:
+/start - Начать работу
+/orders - Мои заказы
+/help - Справка
 """
                 await send_telegram_message(chat_id, response_text)
         
