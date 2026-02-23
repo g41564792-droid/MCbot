@@ -921,8 +921,8 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
             
             elif cbd.startswith("mesh_"):
                 mesh = cbd.replace("mesh_", "")
-                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_WIDTH, "order_data.mesh_type": mesh})
-                await edit_message_text(chat_id, message_id, f"<b>Полотно:</b> {mesh}\n\n📏 <b>Введите ШИРИНУ в мм</b>\n(150-3000)\n\n<i>Например: 800</i>", reply_markup=build_cancel_keyboard())
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_DIMENSIONS, "order_data.mesh_type": mesh})
+                await edit_message_text(chat_id, message_id, f"<b>Полотно:</b> {mesh}\n\n📏 <b>Введите размеры:</b>\nширина высота [кол-во]\n\n<i>Например: 800 1200 2</i>\n<i>или: 800 1200 (1 шт)</i>", reply_markup=build_cancel_keyboard())
             
             elif cbd.startswith("color_"):
                 color = cbd.replace("color_", "")
