@@ -201,21 +201,62 @@ def calculate_item_price(item: OrderItem, settings: PriceSettings) -> float:
 
 # ===================== TELEGRAM BOT =====================
 
-async def send_telegram_message(chat_id: int, text: str, parse_mode: str = "HTML"):
+async def send_telegram_message(chat_id: int, text: str, parse_mode: str = "HTML", reply_markup: dict = None):
     if not TELEGRAM_TOKEN:
         logger.warning("Telegram token not configured")
         return
     
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    
     async with httpx.AsyncClient() as client:
         try:
-            await client.post(url, json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": parse_mode
-            })
+            await client.post(url, json=payload)
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
+
+async def answer_callback_query(callback_query_id: str, text: str = None):
+    """Ответить на callback query"""
+    if not TELEGRAM_TOKEN:
+        return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/answerCallbackQuery"
+    payload = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(url, json=payload)
+        except Exception as e:
+            logger.error(f"Failed to answer callback query: {e}")
+
+async def edit_message_text(chat_id: int, message_id: int, text: str, parse_mode: str = "HTML", reply_markup: dict = None):
+    """Редактировать сообщение"""
+    if not TELEGRAM_TOKEN:
+        return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(url, json=payload)
+        except Exception as e:
+            logger.error(f"Failed to edit message: {e}")
 
 # ===================== GOOGLE SHEETS =====================
 
