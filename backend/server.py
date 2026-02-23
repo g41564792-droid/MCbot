@@ -482,6 +482,81 @@ async def get_order(order_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Нет доступа")
     return OrderResponse(**order)
 
+@api_router.put("/orders/{order_id}")
+async def update_order(
+    order_id: str,
+    data: OrderCreate,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
+):
+    """Редактирование заказа (только для статуса 'new')"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if order["user_id"] != user["id"] and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+    if order["status"] != "new":
+        raise HTTPException(status_code=400, detail="Редактирование возможно только для новых заказов")
+    
+    price_settings = await get_price_settings()
+    
+    items_data = []
+    total_price = 0
+    
+    for item in data.items:
+        item_dict = item.model_dump()
+        
+        notes_parts = []
+        if item.notes:
+            notes_parts.append(item.notes)
+        
+        if (item.width > 1200 or item.height > 1200) and not item.impost:
+            notes_parts.append("без импоста")
+        elif item.impost and item.impost_orientation:
+            notes_parts.append(f"импост {item.impost_orientation}")
+        
+        if not item.mounting_by_manufacturer:
+            notes_parts.append("без прикручивания крепления")
+        
+        if notes_parts:
+            item_dict["notes"] = "; ".join(notes_parts)
+        
+        item_dict["item_price"] = calculate_item_price(item, price_settings)
+        total_price += item_dict["item_price"]
+        items_data.append(item_dict)
+    
+    updated_order = {
+        "items": items_data,
+        "total_price": round(total_price, 2),
+        "desired_date": data.desired_date,
+        "notes": data.notes,
+        "contact_phone": data.contact_phone or user["phone"],
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.update_one({"id": order_id}, {"$set": updated_order})
+    
+    # Get updated order
+    result = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    return OrderResponse(**result)
+
+@api_router.delete("/orders/{order_id}")
+async def cancel_order(order_id: str, user: dict = Depends(get_current_user)):
+    """Отмена заказа (только для статуса 'new')"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if order["user_id"] != user["id"] and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Нет доступа")
+    if order["status"] != "new":
+        raise HTTPException(status_code=400, detail="Отмена возможна только для новых заказов")
+    
+    await db.orders.update_one(
+        {"id": order_id}, 
+        {"$set": {"status": "cancelled", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True, "message": "Заказ отменён"}
+
 # ===================== ADMIN ROUTES =====================
 
 @api_router.get("/admin/orders", response_model=List[OrderResponse])
