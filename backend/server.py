@@ -791,296 +791,308 @@ async def calculate_order_price(items: List[OrderItem]):
         "total": round(total, 2)
     }
 
+
 # ===================== TELEGRAM WEBHOOK =====================
 
-# Inline keyboard builders
-def build_main_menu_keyboard():
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "🛒 Новый заказ", "callback_data": "new_order"},
-                {"text": "📋 Мои заказы", "callback_data": "my_orders"}
-            ],
-            [
-                {"text": "📞 Связаться", "callback_data": "contact"},
-                {"text": "❓ Помощь", "callback_data": "help"}
-            ]
-        ]
-    }
+from telegram_bot import (
+    TelegramOrderState, build_main_menu_keyboard, build_order_type_keyboard,
+    build_mesh_type_keyboard, build_color_keyboard, build_mounting_keyboard,
+    build_yes_no_keyboard, build_impost_orientation_keyboard, build_confirm_keyboard,
+    build_cancel_keyboard, format_order_summary, TYPE_NAMES, MESH_NAMES, MOUNT_NAMES,
+    STATUS_EMOJI, STATUS_NAMES
+)
 
-def build_order_type_keyboard():
-    return {
-        "inline_keyboard": [
-            [{"text": "🪟 Проёмная (наружная)", "callback_data": "type_проемная_наружный"}],
-            [{"text": "🪟 Проёмная (внутренняя)", "callback_data": "type_проемная_внутренний"}],
-            [{"text": "🪟 Проёмная (встраиваемая)", "callback_data": "type_проемная_встраиваемый"}],
-            [{"text": "🚪 Дверная", "callback_data": "type_дверная"}],
-            [{"text": "🔄 Роллетная", "callback_data": "type_роллетная"}],
-            [{"text": "◀️ Назад", "callback_data": "back_main"}]
-        ]
-    }
+# Telegram Order Session Management
+async def get_tg_session(chat_id: int) -> dict:
+    session = await db.telegram_sessions.find_one({"chat_id": chat_id}, {"_id": 0})
+    if not session:
+        session = {
+            "chat_id": chat_id,
+            "state": TelegramOrderState.IDLE,
+            "order_data": {},
+            "items": [],
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.telegram_sessions.insert_one(session)
+    return session
 
-def build_mesh_type_keyboard():
-    return {
-        "inline_keyboard": [
-            [{"text": "📐 Стандартное", "callback_data": "mesh_стандартное"}],
-            [{"text": "🌫️ Антипыль (+500₽)", "callback_data": "mesh_антипыль"}],
-            [{"text": "🦟 Антимошка (+300₽)", "callback_data": "mesh_антимошка"}],
-            [{"text": "🐱 Антикошка (+800₽)", "callback_data": "mesh_антикошка"}],
-            [{"text": "◀️ Назад", "callback_data": "back_type"}]
-        ]
-    }
+async def update_tg_session(chat_id: int, updates: dict):
+    await db.telegram_sessions.update_one({"chat_id": chat_id}, {"$set": updates}, upsert=True)
 
-def build_back_keyboard(callback_data: str = "back_main"):
-    return {
-        "inline_keyboard": [
-            [{"text": "◀️ Назад в меню", "callback_data": callback_data}]
-        ]
-    }
+async def clear_tg_session(chat_id: int):
+    await db.telegram_sessions.update_one(
+        {"chat_id": chat_id},
+        {"$set": {"state": TelegramOrderState.IDLE, "order_data": {}, "items": []}}
+    )
+
+async def calculate_item_price_for_tg(item: dict) -> float:
+    settings = await get_price_settings()
+    area_sqm = (item['width'] * item['height']) / 1000000
+    price = area_sqm * settings.base_price_per_sqm
+    
+    if item['installation_type'] == "дверная":
+        price *= settings.door_type_multiplier
+    elif item['installation_type'] == "роллетная":
+        price *= settings.roller_type_multiplier
+    
+    if item.get('color', '').startswith('ral_'):
+        price += settings.ral_painting_cost
+    
+    mesh_type = item.get('mesh_type', 'стандартное')
+    if mesh_type == "антипыль":
+        price += settings.mesh_antidust_extra
+    elif mesh_type == "антимошка":
+        price += settings.mesh_antimosquito_extra
+    elif mesh_type == "антикошка":
+        price += settings.mesh_anticat_extra
+    
+    if item.get('impost'):
+        price += settings.impost_cost
+    
+    mount_type = item.get('mounting_type', 'z_bracket')
+    if mount_type == "z_bracket":
+        price += settings.mounting_z_bracket
+    elif mount_type == "metal_hooks":
+        price += settings.mounting_metal_hooks
+    elif mount_type == "plastic_hooks":
+        price += settings.mounting_plastic_hooks
+    
+    return round(price * item.get('quantity', 1), 2)
 
 @api_router.post("/telegram/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         data = await request.json()
-        logger.info(f"Telegram webhook received: {data}")
+        logger.info(f"Telegram webhook: {data.get('callback_query', {}).get('data', data.get('message', {}).get('text', ''))[:50]}")
         
-        # Handle callback queries (inline button presses)
+        # Handle callback queries
         if "callback_query" in data:
-            callback = data["callback_query"]
-            callback_id = callback["id"]
-            chat_id = callback["message"]["chat"]["id"]
-            message_id = callback["message"]["message_id"]
-            callback_data = callback.get("data", "")
-            user_first_name = callback.get("from", {}).get("first_name", "")
+            cb = data["callback_query"]
+            callback_id = cb["id"]
+            chat_id = cb["message"]["chat"]["id"]
+            message_id = cb["message"]["message_id"]
+            cbd = cb.get("data", "")
             
             await answer_callback_query(callback_id)
+            session = await get_tg_session(chat_id)
             
-            if callback_data == "back_main":
-                webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
-                text = f"""
-<b>Главное меню</b>
-
-Выберите действие или перейдите на сайт для оформления заказа:
-{webapp_url}
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_main_menu_keyboard())
+            if cbd == "cancel_order":
+                await clear_tg_session(chat_id)
+                await edit_message_text(chat_id, message_id, "❌ <b>Заказ отменён</b>\n\nВыберите действие:", reply_markup=build_main_menu_keyboard())
             
-            elif callback_data == "new_order":
-                text = """
-<b>🛒 Новый заказ</b>
-
-Выберите тип москитной сетки:
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_order_type_keyboard())
+            elif cbd == "back_main":
+                await clear_tg_session(chat_id)
+                await edit_message_text(chat_id, message_id, "<b>Главное меню</b>\n\nВыберите действие:", reply_markup=build_main_menu_keyboard())
             
-            elif callback_data.startswith("type_"):
-                installation_type = callback_data.replace("type_", "")
-                type_names = {
-                    "проемная_наружный": "Проёмная (наружная)",
-                    "проемная_внутренний": "Проёмная (внутренняя)",
-                    "проемная_встраиваемый": "Проёмная (встраиваемая)",
-                    "дверная": "Дверная",
-                    "роллетная": "Роллетная"
-                }
-                type_name = type_names.get(installation_type, installation_type)
+            elif cbd == "new_order":
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_TYPE, "order_data": {}, "items": []})
+                await edit_message_text(chat_id, message_id, "<b>🛒 Новый заказ</b>\n\nВыберите тип москитной сетки:", reply_markup=build_order_type_keyboard())
+            
+            elif cbd.startswith("type_"):
+                itype = cbd.replace("type_", "")
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_MESH, "order_data.installation_type": itype})
+                await edit_message_text(chat_id, message_id, f"<b>Тип:</b> {TYPE_NAMES.get(itype, itype)}\n\nВыберите тип полотна:", reply_markup=build_mesh_type_keyboard())
+            
+            elif cbd.startswith("mesh_"):
+                mesh = cbd.replace("mesh_", "")
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_WIDTH, "order_data.mesh_type": mesh})
+                await edit_message_text(chat_id, message_id, f"<b>Полотно:</b> {mesh}\n\n📏 <b>Введите ШИРИНУ в мм</b>\n(150-3000)\n\n<i>Например: 800</i>", reply_markup=build_cancel_keyboard())
+            
+            elif cbd.startswith("color_"):
+                color = cbd.replace("color_", "")
+                if color == "ral":
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_RAL})
+                    await edit_message_text(chat_id, message_id, "🎨 <b>Введите код RAL</b>\n\n<i>Например: 7016</i>", reply_markup=build_cancel_keyboard())
+                else:
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_MOUNTING, "order_data.color": color})
+                    await edit_message_text(chat_id, message_id, f"<b>Цвет:</b> {color}\n\n🔧 Выберите крепление:", reply_markup=build_mounting_keyboard())
+            
+            elif cbd.startswith("mount_"):
+                mount = cbd.replace("mount_", "")
+                session = await get_tg_session(chat_id)
+                od = session.get("order_data", {})
+                if od.get("width", 0) > 1200 or od.get("height", 0) > 1200:
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_IMPOST, "order_data.mounting_type": mount})
+                    await edit_message_text(chat_id, message_id, "⚠️ <b>Рекомендуется импост</b>\n(размер > 1200 мм)\n\nДобавить?", reply_markup=build_yes_no_keyboard("impost"))
+                else:
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.mounting_type": mount, "order_data.impost": False})
+                    await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+            
+            elif cbd == "impost_yes":
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_IMPOST_ORIENTATION, "order_data.impost": True})
+                await edit_message_text(chat_id, message_id, "➕ <b>Ориентация импоста:</b>", reply_markup=build_impost_orientation_keyboard())
+            
+            elif cbd == "impost_no":
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.impost": False})
+                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+            
+            elif cbd.startswith("impost_") and cbd not in ["impost_yes", "impost_no"]:
+                orient = cbd.replace("impost_", "")
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.impost_orientation": orient})
+                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+            
+            elif cbd == "confirm_order":
+                session = await get_tg_session(chat_id)
+                items = session.get("items", [])
+                od = session.get("order_data", {})
                 
-                text = f"""
-<b>Выбран тип: {type_name}</b>
-
-Теперь выберите тип полотна:
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_mesh_type_keyboard())
-            
-            elif callback_data == "back_type":
-                text = """
-<b>🛒 Новый заказ</b>
-
-Выберите тип москитной сетки:
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_order_type_keyboard())
-            
-            elif callback_data.startswith("mesh_"):
-                webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
-                text = f"""
-<b>✅ Отлично!</b>
-
-Для завершения заказа перейдите на сайт и укажите точные размеры:
-
-🔗 {webapp_url}
-
-<i>На сайте вы сможете:</i>
-• Указать точные размеры в миллиметрах
-• Выбрать цвет и крепление
-• Добавить несколько позиций
-• Увидеть итоговую стоимость
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
-            
-            elif callback_data == "my_orders":
+                if not items:
+                    await edit_message_text(chat_id, message_id, "❌ Нет позиций", reply_markup=build_main_menu_keyboard())
+                    return {"ok": True}
+                
                 user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
                 if not user:
-                    text = f"""
-<b>Аккаунт не найден</b>
-
-Для просмотра заказов зарегистрируйтесь на сайте и укажите ваш Telegram ID.
-
-<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
-"""
-                else:
-                    orders = await db.orders.find(
-                        {"user_id": user["id"]}, 
-                        {"_id": 0}
-                    ).sort("created_at", -1).limit(5).to_list(5)
-                    
-                    if not orders:
-                        text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ!"
-                    else:
-                        status_emoji = {
-                            "new": "🆕", "in_progress": "🔧", "ready": "✅",
-                            "delivered": "📦", "cancelled": "❌"
-                        }
-                        status_names = {
-                            "new": "Новый", "in_progress": "В работе", "ready": "Готов",
-                            "delivered": "Выдан", "cancelled": "Отменён"
-                        }
-                        
-                        text = f"<b>📋 Ваши заказы ({user['name']}):</b>\n\n"
-                        for order in orders:
-                            emoji = status_emoji.get(order["status"], "❓")
-                            status = status_names.get(order["status"], order["status"])
-                            text += f"{emoji} <b>#{order['id'][:8]}</b> - {status}\n"
-                            text += f"   💰 {order['total_price']} ₽ | 📅 {order['desired_date']}\n\n"
+                    user = {"id": str(uuid.uuid4()), "phone": od.get("phone", "tg"), "password": hash_password(str(chat_id)), "name": f"Telegram #{chat_id}", "telegram_id": chat_id, "is_admin": False, "created_at": datetime.now(timezone.utc).isoformat()}
+                    await db.users.insert_one(user)
                 
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+                total = sum(i.get("price", 0) for i in items)
+                order_items = [{
+                    "installation_type": i["installation_type"], "width": i["width"], "height": i["height"],
+                    "quantity": i.get("quantity", 1), "color": i["color"], "ral_color_description": i.get("ral_color_description"),
+                    "mounting_type": i["mounting_type"], "mounting_by_manufacturer": True, "mesh_type": i["mesh_type"],
+                    "impost": i.get("impost", False), "impost_orientation": i.get("impost_orientation"), "notes": "", "item_price": i.get("price", 0)
+                } for i in items]
+                
+                order = {
+                    "id": str(uuid.uuid4()), "user_id": user["id"], "user_name": user["name"], "user_phone": od.get("phone", user.get("phone")),
+                    "items": order_items, "total_price": total, "status": "new",
+                    "status_history": [{"status": "new", "changed_at": datetime.now(timezone.utc).isoformat()}],
+                    "desired_date": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d"),
+                    "notes": "Заказ через Telegram", "contact_phone": od.get("phone"),
+                    "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.orders.insert_one(order)
+                background_tasks.add_task(append_order_to_sheets, order)
+                background_tasks.add_task(notify_admins_new_order, order)
+                await clear_tg_session(chat_id)
+                
+                await edit_message_text(chat_id, message_id, f"✅ <b>Заказ оформлен!</b>\n\n<b>№:</b> #{order['id'][:8]}\n<b>Сумма:</b> {total} ₽\n<b>Позиций:</b> {len(items)}\n\nМы свяжемся с вами!", reply_markup=build_main_menu_keyboard())
             
-            elif callback_data == "contact":
-                text = """
-<b>📞 Контакты</b>
-
-Для связи с нами:
-• Напишите в этот чат - мы ответим
-• Позвоните по телефону
-
-Мы работаем: Пн-Пт 9:00-18:00
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            elif cbd == "add_more_items":
+                session = await get_tg_session(chat_id)
+                phone = session.get("order_data", {}).get("phone")
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_TYPE, "order_data": {"phone": phone}})
+                await edit_message_text(chat_id, message_id, "<b>➕ Добавить позицию</b>\n\nВыберите тип:", reply_markup=build_order_type_keyboard())
             
-            elif callback_data == "help":
-                text = """
-<b>❓ Помощь</b>
-
-<b>Как сделать заказ:</b>
-1. Нажмите "Новый заказ"
-2. Выберите тип сетки
-3. Перейдите на сайт для указания размеров
-4. Получайте уведомления о статусе
-
-<b>Типы сеток:</b>
-• Проёмная - для окон
-• Дверная - для дверей
-• Роллетная - сворачивающаяся
-
-<b>Типы полотна:</b>
-• Стандартное - базовое
-• Антипыль - мелкая ячейка
-• Антимошка - защита от мошек
-• Антикошка - усиленное
-"""
-                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            elif cbd == "my_orders":
+                user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
+                if not user:
+                    text = "<b>Заказов пока нет</b>\n\nОформите первый!"
+                else:
+                    orders = await db.orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+                    if not orders:
+                        text = "<b>У вас пока нет заказов</b>"
+                    else:
+                        text = "<b>📋 Ваши заказы:</b>\n\n"
+                        for o in orders:
+                            text += f"{STATUS_EMOJI.get(o['status'], '❓')} <b>#{o['id'][:8]}</b> - {STATUS_NAMES.get(o['status'], o['status'])}\n   💰 {o['total_price']} ₽\n\n"
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_main_menu_keyboard())
+            
+            elif cbd == "contact":
+                await edit_message_text(chat_id, message_id, "<b>📞 Контакты</b>\n\nНапишите нам в этот чат.\nМы работаем: Пн-Пт 9:00-18:00", reply_markup=build_main_menu_keyboard())
+            
+            elif cbd == "help":
+                await edit_message_text(chat_id, message_id, "<b>❓ Помощь</b>\n\n<b>Как заказать:</b>\n1. Новый заказ\n2. Тип сетки\n3. Полотно\n4. Размеры\n5. Цвет и крепление\n6. Подтвердить\n\n<b>Размеры:</b> 150-3000 мм", reply_markup=build_main_menu_keyboard())
             
             return {"ok": True}
         
-        # Handle regular messages
+        # Handle text messages
         if "message" in data:
-            message = data["message"]
-            chat_id = message["chat"]["id"]
-            text = message.get("text", "")
-            user_first_name = message.get("from", {}).get("first_name", "")
+            msg = data["message"]
+            chat_id = msg["chat"]["id"]
+            text = msg.get("text", "")
+            name = msg.get("from", {}).get("first_name", "")
+            
+            session = await get_tg_session(chat_id)
+            state = session.get("state", TelegramOrderState.IDLE)
             
             if text == "/start":
-                webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
-                response_text = f"""
-<b>Добро пожаловать, {user_first_name}!</b>
-
-Сервис заказа москитных сеток к вашим услугам.
-
-<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
-<i>(укажите при регистрации для уведомлений)</i>
-
-Выберите действие:
-"""
-                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
-            
-            elif text == "/help":
-                response_text = """
-<b>Справка по боту</b>
-
-<b>Команды:</b>
-/start - Главное меню
-/orders - Мои заказы
-/help - Эта справка
-
-<b>Типы москитных сеток:</b>
-• Проёмная (наружная, внутренняя, встраиваемая)
-• Дверная
-• Роллетная
-
-<b>Типы полотна:</b>
-• Стандартное
-• Антипыль (+500₽)
-• Антимошка (+300₽)
-• Антикошка (+800₽)
-"""
-                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
-            
+                await clear_tg_session(chat_id)
+                await send_telegram_message(chat_id, f"<b>Добро пожаловать, {name}!</b>\n\n🪟 Сервис заказа москитных сеток\n\nВыберите действие:", reply_markup=build_main_menu_keyboard())
+            elif text in ["/help", "/cancel"]:
+                await clear_tg_session(chat_id)
+                await send_telegram_message(chat_id, "Команды: /start /orders /help", reply_markup=build_main_menu_keyboard())
             elif text == "/orders":
                 user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
-                if not user:
-                    response_text = f"""
-<b>Аккаунт не найден</b>
-
-Для просмотра заказов зарегистрируйтесь на сайте и укажите ваш Telegram ID.
-
-<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
-"""
-                else:
-                    orders = await db.orders.find(
-                        {"user_id": user["id"]}, 
-                        {"_id": 0}
-                    ).sort("created_at", -1).limit(5).to_list(5)
-                    
-                    if not orders:
-                        response_text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ!"
+                if user:
+                    orders = await db.orders.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+                    if orders:
+                        t = "<b>📋 Заказы:</b>\n\n"
+                        for o in orders:
+                            t += f"{STATUS_EMOJI.get(o['status'], '❓')} #{o['id'][:8]} - {STATUS_NAMES.get(o['status'], o['status'])}\n   {o['total_price']} ₽\n\n"
+                        await send_telegram_message(chat_id, t, reply_markup=build_main_menu_keyboard())
                     else:
-                        status_emoji = {
-                            "new": "🆕", "in_progress": "🔧", "ready": "✅",
-                            "delivered": "📦", "cancelled": "❌"
-                        }
-                        status_names = {
-                            "new": "Новый", "in_progress": "В работе", "ready": "Готов",
-                            "delivered": "Выдан", "cancelled": "Отменён"
-                        }
-                        
-                        response_text = f"<b>📋 Ваши заказы ({user['name']}):</b>\n\n"
-                        for order in orders:
-                            emoji = status_emoji.get(order["status"], "❓")
-                            status = status_names.get(order["status"], order["status"])
-                            items_count = len(order["items"])
-                            response_text += f"{emoji} <b>#{order['id'][:8]}</b>\n"
-                            response_text += f"   Позиций: {items_count}, Сумма: {order['total_price']} ₽\n"
-                            response_text += f"   Статус: {status}\n"
-                            response_text += f"   Дата: {order['desired_date']}\n\n"
-                
-                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
+                        await send_telegram_message(chat_id, "Заказов нет", reply_markup=build_main_menu_keyboard())
+                else:
+                    await send_telegram_message(chat_id, "Заказов нет", reply_markup=build_main_menu_keyboard())
+            
+            elif state == TelegramOrderState.AWAITING_WIDTH:
+                try:
+                    w = int(text.strip())
+                    if 150 <= w <= 3000:
+                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_HEIGHT, "order_data.width": w})
+                        await send_telegram_message(chat_id, f"<b>Ширина:</b> {w} мм\n\n📏 <b>Введите ВЫСОТУ</b> (150-3000)", reply_markup=build_cancel_keyboard())
+                    else:
+                        await send_telegram_message(chat_id, "❌ 150-3000 мм", reply_markup=build_cancel_keyboard())
+                except:
+                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
+            
+            elif state == TelegramOrderState.AWAITING_HEIGHT:
+                try:
+                    h = int(text.strip())
+                    if 150 <= h <= 3000:
+                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_QUANTITY, "order_data.height": h})
+                        await send_telegram_message(chat_id, f"<b>Высота:</b> {h} мм\n\n🔢 <b>Количество</b> (1-30)", reply_markup=build_cancel_keyboard())
+                    else:
+                        await send_telegram_message(chat_id, "❌ 150-3000 мм", reply_markup=build_cancel_keyboard())
+                except:
+                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
+            
+            elif state == TelegramOrderState.AWAITING_QUANTITY:
+                try:
+                    q = int(text.strip())
+                    if 1 <= q <= 30:
+                        session = await get_tg_session(chat_id)
+                        itype = session.get("order_data", {}).get("installation_type", "")
+                        await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_COLOR, "order_data.quantity": q})
+                        await send_telegram_message(chat_id, f"<b>Кол-во:</b> {q}\n\n🎨 Выберите цвет:", reply_markup=build_color_keyboard(itype))
+                    else:
+                        await send_telegram_message(chat_id, "❌ 1-30 шт", reply_markup=build_cancel_keyboard())
+                except:
+                    await send_telegram_message(chat_id, "❌ Введите число", reply_markup=build_cancel_keyboard())
+            
+            elif state == TelegramOrderState.AWAITING_RAL:
+                ral = text.strip()
+                if 3 <= len(ral) <= 10:
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_MOUNTING, "order_data.color": f"ral_{ral}", "order_data.ral_color_description": ral})
+                    await send_telegram_message(chat_id, f"<b>RAL:</b> {ral}\n\n🔧 Крепление:", reply_markup=build_mounting_keyboard())
+                else:
+                    await send_telegram_message(chat_id, "❌ Введите код RAL (7016)", reply_markup=build_cancel_keyboard())
+            
+            elif state == TelegramOrderState.AWAITING_PHONE:
+                phone = text.strip()
+                if len(phone) >= 5:
+                    session = await get_tg_session(chat_id)
+                    od = session.get("order_data", {})
+                    item = {
+                        "installation_type": od.get("installation_type"), "width": od.get("width"), "height": od.get("height"),
+                        "quantity": od.get("quantity", 1), "color": od.get("color"), "ral_color_description": od.get("ral_color_description"),
+                        "mounting_type": od.get("mounting_type"), "mesh_type": od.get("mesh_type"),
+                        "impost": od.get("impost", False), "impost_orientation": od.get("impost_orientation")
+                    }
+                    item["price"] = await calculate_item_price_for_tg(item)
+                    
+                    items = session.get("items", [])
+                    items.append(item)
+                    
+                    await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_CONFIRM, "order_data.phone": phone, "items": items})
+                    summary = format_order_summary(items, {"phone": phone})
+                    await send_telegram_message(chat_id, summary + "\n<b>Подтвердите:</b>", reply_markup=build_confirm_keyboard())
+                else:
+                    await send_telegram_message(chat_id, "❌ Телефон некорректный", reply_markup=build_cancel_keyboard())
             
             else:
-                response_text = """
-Не понял команду. Используйте меню или команды:
-/start - Главное меню
-/orders - Мои заказы
-/help - Справка
-"""
-                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
+                await send_telegram_message(chat_id, "Используйте меню или /start", reply_markup=build_main_menu_keyboard())
         
         return {"ok": True}
     except Exception as e:
