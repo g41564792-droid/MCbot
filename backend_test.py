@@ -653,7 +653,10 @@ class MosquitoNetAPITester:
             self.test_order_creation,
             self.test_order_retrieval,
             self.test_admin_functionality,
-            self.test_telegram_webhook
+            self.test_telegram_webhook,
+            self.test_telegram_inline_keyboards,
+            self.test_telegram_order_type_keyboard,
+            self.test_push_notifications_on_status_change
         ]
         
         for test in tests:
