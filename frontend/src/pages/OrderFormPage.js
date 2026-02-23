@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -14,12 +14,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popove
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import { Separator } from '../components/ui/separator';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   Ruler, Plus, Minus, Trash2, CalendarIcon, Send, AlertCircle, 
-  LogIn, User, ShoppingCart, ChevronRight, Info
+  LogIn, User, ShoppingCart, ChevronRight, Info, MessageCircle, Save
 } from 'lucide-react';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const TELEGRAM_BOT_URL = 'https://t.me/OlWait_MC_Bot';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
