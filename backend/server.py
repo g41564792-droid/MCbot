@@ -994,7 +994,30 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                 background_tasks.add_task(notify_admins_new_order, order)
                 await clear_tg_session(chat_id)
                 
-                await edit_message_text(chat_id, message_id, f"✅ <b>Заказ оформлен!</b>\n\n<b>№:</b> {order_number}\n<b>Сумма:</b> {total} ₽\n<b>Позиций:</b> {len(items)}\n\nМы свяжемся с вами!", reply_markup=build_main_menu_keyboard())
+                # Show after-order keyboard with view options
+                await edit_message_text(chat_id, message_id, f"✅ <b>Заказ оформлен!</b>\n\n<b>№:</b> {order_number}\n<b>Сумма:</b> {total} ₽\n<b>Позиций:</b> {len(items)}\n\nМы свяжемся с вами!", reply_markup=build_after_order_keyboard(order_number))
+            
+            elif cbd.startswith("view_order_"):
+                order_num = cbd.replace("view_order_", "")
+                order = await get_order_by_number(order_num)
+                if order:
+                    status = STATUS_NAMES.get(order['status'], order['status'])
+                    emoji = STATUS_EMOJI.get(order['status'], '❓')
+                    
+                    # Build items list
+                    items_text = ""
+                    for i, item in enumerate(order['items'], 1):
+                        items_text += f"\n{i}. {item['width']}×{item['height']} мм × {item['quantity']} шт"
+                    
+                    t = f"{emoji} <b>Заказ {order_num}</b>\n\n"
+                    t += f"<b>Статус:</b> {status}\n"
+                    t += f"<b>Сумма:</b> {order['total_price']} ₽\n"
+                    t += f"<b>Желаемая дата:</b> {order['desired_date']}\n"
+                    t += f"\n<b>Позиции:</b>{items_text}"
+                    
+                    await edit_message_text(chat_id, message_id, t, reply_markup=build_main_menu_keyboard())
+                else:
+                    await edit_message_text(chat_id, message_id, f"❌ Заказ {order_num} не найден", reply_markup=build_main_menu_keyboard())
             
             elif cbd == "add_more_items":
                 session = await get_tg_session(chat_id)
