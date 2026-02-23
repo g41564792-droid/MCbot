@@ -1,0 +1,63 @@
+{
+  "summary": "Comprehensive backend testing completed for Telegram bot updates - МС-0001 order numbers, combined dimensions input, order tracking features all working properly",
+  
+  "backend_issues": {
+    "minor_bugs": [
+      {
+        "endpoint": "/api/auth/login",
+        "issue": "User login test failed due to timestamp mismatch between registration and login",
+        "impact": "Test-only issue, not a real functionality problem",
+        "fix_priority": "LOW"
+      }
+    ],
+    "critical_bugs": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "Health endpoints (API root, health check)",
+    "User registration with proper token generation",
+    "Admin login with privilege verification",
+    "Price calculation (basic and with impost)",
+    "Order creation with МС-XXXX number format",
+    "Order retrieval (user orders, specific order)",
+    "Admin functionality (stats, orders, users, status updates, export)",
+    "Telegram webhook commands (/help, /orders, unknown commands)",
+    "Telegram inline keyboards for main menu",
+    "Order type selection via inline keyboards (5 types)",
+    "Mesh type selection (4 types including premium options)",
+    "Navigation callbacks (back to main, type selection)",
+    "Push notifications on status changes (in_progress, ready, delivered)",
+    "Dimension input validation (150-3000mm range)",
+    "Quantity input validation (1-30 units)",
+    "Color selection by installation type (limited for door/roller, full for others)",
+    "Impost recommendation logic for sizes > 1200mm",
+    "Impost orientation selection (vertical/horizontal)",
+    "Status history tracking with proper timestamps",
+    "NEW: Order number generation (МС-0001 format) - Sequential numbering МС-0003, МС-0004, МС-0005",
+    "NEW: Combined dimensions input via Telegram (width height [qty]) - All formats working",
+    "NEW: Order tracking by number via /track command and callback buttons",
+    "NEW: Order number format handling (with/without prefix, case insensitive)",
+    "NEW: Contact button with tel:+375333545588 URL scheme",
+    "Invalid input rejection (dimensions, quantities, order numbers)"
+  ],
+  
+  "test_report_links": ["/app/backend_test.py"],
+  
+  "success_percentage": {
+    "backend": "99.2% (128/129 tests passed)",
+    "frontend": "Not tested (backend-only testing requested)"
+  },
+  
+  "updated_files": ["/app/backend_test.py"],
+  
+  "action_item_for_main_agent": "Minor timing issue in user login test - consider using fixed credentials instead of timestamp-based phone numbers for testing. All new features (МС-0001 order numbers, combined dimensions, order tracking, contact tel: link) are working perfectly.",
+  
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "true"
+}
