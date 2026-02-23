@@ -1,0 +1,155 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "The Anti-AI Designer",
+    "philosophy": "Fusion over Imitation. Emotion First. Content is King."
+  },
+  "project": {
+    "name": "Mosquito Net Order System",
+    "type": "SaaS / Manufacturing E-commerce",
+    "theme_strategy": "Industrial Swiss",
+    "primary_theme": "light",
+    "secondary_theme": "dark"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Manrope, sans-serif",
+      "usage": "Use for all section titles, headers, and hero text. Bold weights (700/800) for impact.",
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "font_family": "IBM Plex Sans, sans-serif",
+      "usage": "Use for forms, descriptions, and data tables. Excellent legibility for dimensions and technical specs.",
+      "letter_spacing": "tracking-normal"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace",
+      "usage": "Use for order IDs, dimensions (mm), and price calculations."
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Industrial Slate",
+        "value": "#0F172A",
+        "usage": "Main text, primary borders, heavy accents."
+      },
+      "accent": {
+        "name": "Technical Blue",
+        "value": "#2563EB",
+        "usage": "Primary buttons, active states, focus rings. High visibility."
+      },
+      "background": {
+        "name": "Factory White",
+        "value": "#F8FAFC",
+        "usage": "Page background. Not pure white to reduce eye strain."
+      },
+      "surface": {
+        "name": "Paper White",
+        "value": "#FFFFFF",
+        "usage": "Cards, form containers, dropdowns."
+      },
+      "success": {
+        "name": "Safety Green",
+        "value": "#16A34A",
+        "usage": "Completed orders, confirmed status, export success."
+      },
+      "warning": {
+        "name": "Caution Orange",
+        "value": "#F59E0B",
+        "usage": "Pending orders, alerts."
+      }
+    },
+    "rules": [
+      "No gradients for backgrounds. Use flat, solid colors.",
+      "Use 1px borders (Slate-200) to define areas. Shadows should be subtle (shadow-sm).",
+      "Text inputs must have a distinct background (Slate-50) vs the surface."
+    ]
+  },
+  "layout_strategies": {
+    "public_order_form": {
+      "type": "Single Page Long-Scroll with Sticky Summary",
+      "grid": "grid-cols-1 md:grid-cols-12",
+      "spacing": "Gap-8 for sections, Gap-4 for internal grids.",
+      "structure": [
+        "Hero: Title + Brief Instruction",
+        "Zone 1: Installation Type (Cards)",
+        "Zone 2: Dimensions & Quantity (Input Group)",
+        "Zone 3: Configuration (Color, Mesh, Mounts)",
+        "Zone 4: Contact & Dates",
+        "Sticky Footer/Sidebar: Live Price + 'Order' Button"
+      ]
+    },
+    "admin_dashboard": {
+      "type": "High Density Data Grid",
+      "grid": "grid-cols-1",
+      "structure": [
+        "Header: Global Actions (Export, Search)",
+        "Stats Row: Total Orders, Revenue, Pending",
+        "Main Table: Orders List with Status Badges and Quick Actions"
+      ]
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "Flat, 1px border, no shadow by default. Hover: Border-blue-600, shadow-md.",
+      "usage": "Selection of Installation Type, Mesh Type."
+    },
+    "inputs": {
+      "style": "H-12 (48px) height for touch targets. Bg-slate-50. Focus: Ring-2 Ring-blue-600.",
+      "validation": "Show error messages below input in red-600."
+    },
+    "buttons": {
+      "primary": "Bg-blue-600 text-white hover:bg-blue-700. Sharp corners or rounded-md (sm).",
+      "secondary": "Bg-white border border-slate-200 text-slate-900 hover:bg-slate-50.",
+      "telegram_main": "If inside Telegram Web App, use the native MainButton, else simulate it with a fixed bottom bar."
+    },
+    "visual_enhancers": {
+      "icons": "Lucide-react (default). Use 'Ruler', 'Maximize', 'Shield', 'Download' icons.",
+      "badges": "rounded-full px-2.5 py-0.5 text-xs font-semibold. Green for 'Done', Gray for 'New'."
+    }
+  },
+  "image_urls": {
+    "installation_types": {
+      "frame": "https://images.unsplash.com/photo-1579905791776-109f2d2f0865?auto=format&fit=crop&w=800&q=80",
+      "door": "https://images.unsplash.com/photo-1683953748762-ffa27a4586d3?auto=format&fit=crop&w=800&q=80",
+      "rolling": "https://images.unsplash.com/photo-1730479257226-d1512ab67097?auto=format&fit=crop&w=800&q=80"
+    },
+    "mesh_types": {
+      "standard": "https://images.unsplash.com/photo-1595972499967-4779c68725e7?auto=format&fit=crop&w=800&q=80",
+      "anti_dust": "https://images.unsplash.com/photo-1766851403418-8bdb9bf82136?auto=format&fit=crop&w=800&q=80",
+      "anti_cat": "https://images.pexels.com/photos/26954238/pexels-photo-26954238.jpeg?auto=compress&cs=tinysrgb&w=800"
+    },
+    "placeholders": {
+      "generic_window": "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?auto=format&fit=crop&w=800&q=80"
+    }
+  },
+  "motion_guidelines": {
+    "interactions": "Fast transitions (150ms). No bounce. Linear or Ease-out.",
+    "loading": "Skeleton loaders for data tables. Spinning loader for form submission.",
+    "page_load": "Fade in (opacity 0 to 1) over 300ms."
+  },
+  "accessibility_checklist": [
+    "Ensure 4.5:1 contrast ratio for all text.",
+    "Inputs must have associated labels.",
+    "Focus states must be clearly visible (Blue ring).",
+    "Support keyboard navigation for the form."
+  ],
+  "universal_guidelines": [
+    "Do not use generic 'Inter' font for headings.",
+    "Use 'data-testid' on all inputs and buttons.",
+    "Design for Mobile First (Telegram Web App context).",
+    "Admin Dashboard can support Dark Mode, but Order Form should be Light Mode for clarity.",
+    "Use Sonner for toast notifications.",
+    "Do not use gradients. Stick to flat, clean, industrial aesthetics."
+  ],
+  "instructions_to_main_agent": [
+    "1. Install necessary fonts: Manrope and IBM Plex Sans.",
+    "2. Configure Tailwind theme with the 'colors' defined above.",
+    "3. Build the Order Form as a 'Long Scroll' page with distinct sections.",
+    "4. Use the provided image URLs for the 'Type Selection' cards.",
+    "5. Implement the 'Admin Dashboard' using Shadcn Table component.",
+    "6. Ensure the 'Google Sheets Export' button is prominent in the Admin UI.",
+    "7. Mock the Telegram MainButton behavior if testing in browser."
+  ]
+}
