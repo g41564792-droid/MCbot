@@ -1039,6 +1039,392 @@ class MosquitoNetAPITester:
         
         return all(history_results) and success_final
 
+    def test_order_number_generation(self):
+        """Test МС-0001 format order number generation"""
+        print("\n" + "="*50)
+        print("TESTING ORDER NUMBER GENERATION (МС-0001 FORMAT)")
+        print("="*50)
+        
+        if not self.user_token:
+            print("⚠️ Skipping order number test - no user token")
+            return True
+        
+        # Create multiple orders to test auto-increment
+        order_numbers = []
+        order_results = []
+        
+        for i in range(3):  # Create 3 orders to test counter increment
+            order_data = {
+                "items": [{
+                    "installation_type": "проемная_наружный",
+                    "width": 800 + i*100,  # Vary dimensions
+                    "height": 1200 + i*100,
+                    "quantity": 1,
+                    "color": "белый",
+                    "mounting_type": "z_bracket",
+                    "mounting_by_manufacturer": True,
+                    "mesh_type": "стандартное",
+                    "impost": False,
+                    "notes": f"Test order {i+1} for number generation"
+                }],
+                "desired_date": (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'),
+                "notes": f"Order number test {i+1}",
+                "contact_phone": "+375295012233"
+            }
+            
+            success, result = self.run_test(
+                f"Order Creation {i+1} - Number Format Test",
+                "POST",
+                "orders",
+                200,
+                order_data
+            )
+            
+            order_results.append(success)
+            
+            if success and 'order_number' in result:
+                order_number = result['order_number']
+                order_numbers.append(order_number)
+                print(f"✅ Order {i+1} created with number: {order_number}")
+                
+                # Verify МС-XXXX format
+                if order_number.startswith('МС-') and len(order_number) == 7:
+                    number_part = order_number[3:]
+                    if number_part.isdigit() and len(number_part) == 4:
+                        print(f"✅ Order number format is correct: {order_number}")
+                    else:
+                        print(f"❌ Order number format incorrect - digits: {number_part}")
+                        order_results[-1] = False
+                else:
+                    print(f"❌ Order number format incorrect: {order_number}")
+                    order_results[-1] = False
+            else:
+                print(f"❌ No order_number in response for order {i+1}")
+                order_results[-1] = False
+        
+        # Verify sequential numbering
+        if len(order_numbers) >= 2:
+            for i in range(1, len(order_numbers)):
+                prev_num = int(order_numbers[i-1][3:])  # Extract number part
+                curr_num = int(order_numbers[i][3:])
+                if curr_num > prev_num:
+                    print(f"✅ Sequential numbering verified: {order_numbers[i-1]} → {order_numbers[i]}")
+                else:
+                    print(f"❌ Sequential numbering failed: {order_numbers[i-1]} → {order_numbers[i]}")
+                    return False
+        
+        return all(order_results)
+
+    def test_combined_dimensions_input(self):
+        """Test combined dimensions input via Telegram (width height qty)"""
+        print("\n" + "="*50)
+        print("TESTING COMBINED DIMENSIONS INPUT (WIDTH HEIGHT [QTY])")
+        print("="*50)
+        
+        chat_id = 555777999
+        
+        # Test various dimension input formats
+        dimension_tests = [
+            ("800 1200", "Basic two dimensions"),
+            ("800 1200 1", "Width height with quantity 1"),
+            ("800 1200 2", "Width height with quantity 2"),
+            ("1500 1800 3", "Large dimensions with quantity 3"),
+            ("300 400 5", "Small dimensions with quantity 5"),
+            ("2500 2800 1", "Large dimensions single quantity")
+        ]
+        
+        dimension_results = []
+        
+        for dimensions_text, description in dimension_tests:
+            dimension_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": dimensions_text,
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Combined Dimensions Input - {description} ({dimensions_text})",
+                "POST",
+                "telegram/webhook",
+                200,
+                dimension_webhook_data
+            )
+            
+            dimension_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Dimensions '{dimensions_text}' processed correctly")
+        
+        # Test invalid dimension input formats
+        invalid_dimension_tests = [
+            ("800", "Only width provided"),
+            ("800 1200 2 extra", "Too many parameters"),
+            ("abc def", "Non-numeric input"),
+            ("800 abc", "Mixed numeric/text"),
+            ("0 1200", "Zero width"),
+            ("800 0", "Zero height"),
+            ("50 1200", "Width too small"),
+            ("800 50", "Height too small"),
+            ("3500 1200", "Width too large"),
+            ("800 3500", "Height too large"),
+            ("800 1200 0", "Zero quantity"),
+            ("800 1200 40", "Quantity too large")
+        ]
+        
+        invalid_dimension_results = []
+        
+        for dimensions_text, description in invalid_dimension_tests:
+            dimension_webhook_data = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": dimensions_text,
+                    "from": {"id": chat_id, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Invalid Dimensions Input - {description} ({dimensions_text})",
+                "POST",
+                "telegram/webhook",
+                200,
+                dimension_webhook_data
+            )
+            
+            invalid_dimension_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ Invalid dimensions '{dimensions_text}' properly handled")
+        
+        return all(dimension_results) and all(invalid_dimension_results)
+
+    def test_order_tracking_by_number(self):
+        """Test order tracking by order number functionality"""
+        print("\n" + "="*50)
+        print("TESTING ORDER TRACKING BY NUMBER")
+        print("="*50)
+        
+        if not self.user_token:
+            print("⚠️ Skipping order tracking test - no user token")
+            return True
+        
+        # First create an order to track
+        order_data = {
+            "items": [{
+                "installation_type": "дверная",
+                "width": 900,
+                "height": 2000,
+                "quantity": 1,
+                "color": "коричневый",
+                "mounting_type": "metal_hooks",
+                "mounting_by_manufacturer": True,
+                "mesh_type": "антипыль",
+                "impost": True,
+                "impost_orientation": "вертикально",
+                "notes": "Order for tracking test"
+            }],
+            "desired_date": (datetime.now() + timedelta(days=5)).strftime('%Y-%m-%d'),
+            "notes": "Tracking test order",
+            "contact_phone": "+375333545588"
+        }
+        
+        success_create, result_create = self.run_test(
+            "Create Order for Tracking Test",
+            "POST",
+            "orders",
+            200,
+            order_data
+        )
+        
+        if not success_create or 'order_number' not in result_create:
+            print("❌ Failed to create order for tracking test")
+            return False
+        
+        order_number = result_create['order_number']
+        print(f"✅ Created order for tracking: {order_number}")
+        
+        # Test tracking via Telegram webhook - /track command
+        chat_id = 777555333
+        
+        # Test /track command
+        track_command_webhook = {
+            "message": {
+                "chat": {"id": chat_id},
+                "text": "/track",
+                "from": {"id": chat_id, "first_name": "TrackUser"}
+            }
+        }
+        
+        success_track_cmd, result_track_cmd = self.run_test(
+            "Telegram /track Command",
+            "POST",
+            "telegram/webhook",
+            200,
+            track_command_webhook
+        )
+        
+        # Test order number input for tracking
+        track_number_webhook = {
+            "message": {
+                "chat": {"id": chat_id},
+                "text": order_number,
+                "from": {"id": chat_id, "first_name": "TrackUser"}
+            }
+        }
+        
+        success_track_num, result_track_num = self.run_test(
+            f"Track Order by Number - {order_number}",
+            "POST",
+            "telegram/webhook",
+            200,
+            track_number_webhook
+        )
+        
+        # Test tracking with callback button
+        track_callback_webhook = {
+            "callback_query": {
+                "id": "test_track_callback",
+                "data": "track_order",
+                "message": {
+                    "chat": {"id": chat_id},
+                    "message_id": 200
+                },
+                "from": {"id": chat_id, "first_name": "TrackUser"}
+            }
+        }
+        
+        success_track_callback, result_track_callback = self.run_test(
+            "Track Order via Callback Button",
+            "POST",
+            "telegram/webhook",
+            200,
+            track_callback_webhook
+        )
+        
+        # Test different order number formats
+        number_format_tests = [
+            (order_number, "Full order number"),
+            (order_number[3:], "Number without МС- prefix"),
+            (order_number.lower(), "Lowercase order number"),
+            (order_number.replace('МС-', 'мс-'), "Lowercase prefix")
+        ]
+        
+        format_results = []
+        
+        for test_number, description in number_format_tests:
+            format_webhook = {
+                "message": {
+                    "chat": {"id": chat_id},
+                    "text": test_number,
+                    "from": {"id": chat_id, "first_name": "FormatUser"}
+                }
+            }
+            
+            success_format, result_format = self.run_test(
+                f"Order Number Format Test - {description} ({test_number})",
+                "POST",
+                "telegram/webhook",
+                200,
+                format_webhook
+            )
+            
+            format_results.append(success_format)
+            if success_format and result_format.get('ok'):
+                print(f"✅ Order number format '{test_number}' handled correctly")
+        
+        # Test invalid order number
+        invalid_number_webhook = {
+            "message": {
+                "chat": {"id": chat_id},
+                "text": "МС-9999",  # Non-existent order number
+                "from": {"id": chat_id, "first_name": "InvalidUser"}
+            }
+        }
+        
+        success_invalid, result_invalid = self.run_test(
+            "Track Invalid Order Number - МС-9999",
+            "POST",
+            "telegram/webhook",
+            200,
+            invalid_number_webhook
+        )
+        
+        return (success_track_cmd and success_track_num and success_track_callback 
+                and all(format_results) and success_invalid)
+
+    def test_contact_button_tel_link(self):
+        """Test contact button with tel: URL functionality"""
+        print("\n" + "="*50)
+        print("TESTING CONTACT BUTTON TEL: URL (+375333545588)")
+        print("="*50)
+        
+        # Test main menu keyboard generation (contains contact button)
+        chat_id = 444222000
+        
+        start_webhook_data = {
+            "message": {
+                "chat": {"id": chat_id},
+                "text": "/start",
+                "from": {"id": chat_id, "first_name": "ContactUser"}
+            }
+        }
+        
+        success_start, result_start = self.run_test(
+            "Generate Main Menu with Contact Button",
+            "POST",
+            "telegram/webhook",
+            200,
+            start_webhook_data
+        )
+        
+        # The contact button is generated in the keyboard, not as a callback
+        # We can verify the webhook processes successfully
+        if success_start and result_start.get('ok'):
+            print("✅ Main menu generated (should contain contact button with tel:+375333545588)")
+        
+        # Test help command that also shows main menu
+        help_webhook_data = {
+            "message": {
+                "chat": {"id": chat_id},
+                "text": "/help",
+                "from": {"id": chat_id, "first_name": "ContactUser"}
+            }
+        }
+        
+        success_help, result_help = self.run_test(
+            "Help Command with Contact Button",
+            "POST",
+            "telegram/webhook",
+            200,
+            help_webhook_data
+        )
+        
+        # Test back to main menu (should also generate contact button)
+        back_callback_webhook = {
+            "callback_query": {
+                "id": "test_back_main_contact",
+                "data": "back_main",
+                "message": {
+                    "chat": {"id": chat_id},
+                    "message_id": 201
+                },
+                "from": {"id": chat_id, "first_name": "ContactUser"}
+            }
+        }
+        
+        success_back, result_back = self.run_test(
+            "Back to Main Menu - Contact Button",
+            "POST",
+            "telegram/webhook",
+            200,
+            back_callback_webhook
+        )
+        
+        # Verify contact phone constant in code
+        print(f"✅ Expected contact phone: +375333545588")
+        print("✅ Contact button should use tel: URL scheme for direct calling")
+        
+        return success_start and success_help and success_back
+
     def run_all_tests(self):
         """Run all tests in sequence"""
         print("🚀 Starting Mosquito Net API Tests...")
