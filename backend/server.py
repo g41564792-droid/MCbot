@@ -217,6 +217,123 @@ async def send_telegram_message(chat_id: int, text: str, parse_mode: str = "HTML
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
 
+# ===================== GOOGLE SHEETS =====================
+
+def get_sheets_service():
+    """Получить сервис Google Sheets API"""
+    if not GOOGLE_CREDENTIALS_FILE or not os.path.exists(GOOGLE_CREDENTIALS_FILE):
+        logger.warning("Google credentials file not found")
+        return None
+    
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            GOOGLE_CREDENTIALS_FILE,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        service = build('sheets', 'v4', credentials=credentials)
+        return service
+    except Exception as e:
+        logger.error(f"Failed to create Google Sheets service: {e}")
+        return None
+
+async def append_order_to_sheets(order: dict):
+    """Добавить заказ в Google Sheets"""
+    if not GOOGLE_SPREADSHEET_ID:
+        logger.warning("Google Spreadsheet ID not configured")
+        return
+    
+    def _append():
+        service = get_sheets_service()
+        if not service:
+            return
+        
+        try:
+            rows = []
+            for item in order["items"]:
+                # Build notes string
+                notes_parts = []
+                if item.get("impost"):
+                    notes_parts.append(f"импост {item.get('impost_orientation', '')}")
+                elif item.get("width", 0) > 1200 or item.get("height", 0) > 1200:
+                    notes_parts.append("без импоста")
+                if not item.get("mounting_by_manufacturer", True):
+                    notes_parts.append("без прикручивания крепления")
+                if item.get("notes"):
+                    notes_parts.append(item["notes"])
+                
+                row = [
+                    order["id"][:8],  # ID заказа
+                    order["created_at"][:10],  # Дата
+                    order.get("user_name", ""),  # Клиент
+                    order.get("contact_phone", order.get("user_phone", "")),  # Телефон
+                    item["installation_type"],  # Тип установки
+                    str(item["width"]),  # Ширина
+                    str(item["height"]),  # Высота
+                    str(item["quantity"]),  # Количество
+                    item["color"],  # Цвет
+                    item["mounting_type"],  # Крепление
+                    item["mesh_type"],  # Полотно
+                    "; ".join(notes_parts) if notes_parts else "",  # Примечание
+                    str(item.get("item_price", 0)),  # Цена позиции
+                    str(order["total_price"]),  # Общая сумма
+                    order["status"],  # Статус
+                    order["desired_date"]  # Желаемая дата
+                ]
+                rows.append(row)
+            
+            body = {"values": rows}
+            service.spreadsheets().values().append(
+                spreadsheetId=GOOGLE_SPREADSHEET_ID,
+                range="A:P",
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body=body
+            ).execute()
+            
+            logger.info(f"Order {order['id'][:8]} appended to Google Sheets")
+        except Exception as e:
+            logger.error(f"Failed to append order to Google Sheets: {e}")
+    
+    await asyncio.to_thread(_append)
+
+async def setup_sheets_header():
+    """Создать заголовки в таблице если их нет"""
+    if not GOOGLE_SPREADSHEET_ID:
+        return
+    
+    def _setup():
+        service = get_sheets_service()
+        if not service:
+            return
+        
+        try:
+            # Check if header exists
+            result = service.spreadsheets().values().get(
+                spreadsheetId=GOOGLE_SPREADSHEET_ID,
+                range="A1:P1"
+            ).execute()
+            
+            values = result.get("values", [])
+            if not values or not values[0]:
+                # Add header row
+                headers = [[
+                    "ID заказа", "Дата", "Клиент", "Телефон", 
+                    "Тип установки", "Ширина", "Высота", "Кол-во",
+                    "Цвет", "Крепление", "Полотно", "Примечание",
+                    "Цена поз.", "Сумма", "Статус", "Желаемая дата"
+                ]]
+                service.spreadsheets().values().update(
+                    spreadsheetId=GOOGLE_SPREADSHEET_ID,
+                    range="A1:P1",
+                    valueInputOption="RAW",
+                    body={"values": headers}
+                ).execute()
+                logger.info("Google Sheets headers created")
+        except Exception as e:
+            logger.error(f"Failed to setup Google Sheets header: {e}")
+    
+    await asyncio.to_thread(_setup)
+
 async def notify_admins_new_order(order: dict):
     """Уведомление админов о новом заказе"""
     admins = await db.users.find({"is_admin": True, "telegram_id": {"$ne": None}}, {"_id": 0}).to_list(100)
