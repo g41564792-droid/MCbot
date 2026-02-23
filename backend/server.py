@@ -728,12 +728,204 @@ async def calculate_order_price(items: List[OrderItem]):
 
 # ===================== TELEGRAM WEBHOOK =====================
 
+# Inline keyboard builders
+def build_main_menu_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🛒 Новый заказ", "callback_data": "new_order"},
+                {"text": "📋 Мои заказы", "callback_data": "my_orders"}
+            ],
+            [
+                {"text": "📞 Связаться", "callback_data": "contact"},
+                {"text": "❓ Помощь", "callback_data": "help"}
+            ]
+        ]
+    }
+
+def build_order_type_keyboard():
+    return {
+        "inline_keyboard": [
+            [{"text": "🪟 Проёмная (наружная)", "callback_data": "type_проемная_наружный"}],
+            [{"text": "🪟 Проёмная (внутренняя)", "callback_data": "type_проемная_внутренний"}],
+            [{"text": "🪟 Проёмная (встраиваемая)", "callback_data": "type_проемная_встраиваемый"}],
+            [{"text": "🚪 Дверная", "callback_data": "type_дверная"}],
+            [{"text": "🔄 Роллетная", "callback_data": "type_роллетная"}],
+            [{"text": "◀️ Назад", "callback_data": "back_main"}]
+        ]
+    }
+
+def build_mesh_type_keyboard():
+    return {
+        "inline_keyboard": [
+            [{"text": "📐 Стандартное", "callback_data": "mesh_стандартное"}],
+            [{"text": "🌫️ Антипыль (+500₽)", "callback_data": "mesh_антипыль"}],
+            [{"text": "🦟 Антимошка (+300₽)", "callback_data": "mesh_антимошка"}],
+            [{"text": "🐱 Антикошка (+800₽)", "callback_data": "mesh_антикошка"}],
+            [{"text": "◀️ Назад", "callback_data": "back_type"}]
+        ]
+    }
+
+def build_back_keyboard(callback_data: str = "back_main"):
+    return {
+        "inline_keyboard": [
+            [{"text": "◀️ Назад в меню", "callback_data": callback_data}]
+        ]
+    }
+
 @api_router.post("/telegram/webhook")
 async def telegram_webhook(request: Request):
     try:
         data = await request.json()
         logger.info(f"Telegram webhook received: {data}")
         
+        # Handle callback queries (inline button presses)
+        if "callback_query" in data:
+            callback = data["callback_query"]
+            callback_id = callback["id"]
+            chat_id = callback["message"]["chat"]["id"]
+            message_id = callback["message"]["message_id"]
+            callback_data = callback.get("data", "")
+            user_first_name = callback.get("from", {}).get("first_name", "")
+            
+            await answer_callback_query(callback_id)
+            
+            if callback_data == "back_main":
+                webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
+                text = f"""
+<b>Главное меню</b>
+
+Выберите действие или перейдите на сайт для оформления заказа:
+{webapp_url}
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_main_menu_keyboard())
+            
+            elif callback_data == "new_order":
+                text = """
+<b>🛒 Новый заказ</b>
+
+Выберите тип москитной сетки:
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_order_type_keyboard())
+            
+            elif callback_data.startswith("type_"):
+                installation_type = callback_data.replace("type_", "")
+                type_names = {
+                    "проемная_наружный": "Проёмная (наружная)",
+                    "проемная_внутренний": "Проёмная (внутренняя)",
+                    "проемная_встраиваемый": "Проёмная (встраиваемая)",
+                    "дверная": "Дверная",
+                    "роллетная": "Роллетная"
+                }
+                type_name = type_names.get(installation_type, installation_type)
+                
+                text = f"""
+<b>Выбран тип: {type_name}</b>
+
+Теперь выберите тип полотна:
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_mesh_type_keyboard())
+            
+            elif callback_data == "back_type":
+                text = """
+<b>🛒 Новый заказ</b>
+
+Выберите тип москитной сетки:
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_order_type_keyboard())
+            
+            elif callback_data.startswith("mesh_"):
+                webapp_url = os.environ.get('WEBAPP_URL', 'https://mosquito-net-bot.preview.emergentagent.com')
+                text = f"""
+<b>✅ Отлично!</b>
+
+Для завершения заказа перейдите на сайт и укажите точные размеры:
+
+🔗 {webapp_url}
+
+<i>На сайте вы сможете:</i>
+• Указать точные размеры в миллиметрах
+• Выбрать цвет и крепление
+• Добавить несколько позиций
+• Увидеть итоговую стоимость
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            
+            elif callback_data == "my_orders":
+                user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
+                if not user:
+                    text = f"""
+<b>Аккаунт не найден</b>
+
+Для просмотра заказов зарегистрируйтесь на сайте и укажите ваш Telegram ID.
+
+<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
+"""
+                else:
+                    orders = await db.orders.find(
+                        {"user_id": user["id"]}, 
+                        {"_id": 0}
+                    ).sort("created_at", -1).limit(5).to_list(5)
+                    
+                    if not orders:
+                        text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ!"
+                    else:
+                        status_emoji = {
+                            "new": "🆕", "in_progress": "🔧", "ready": "✅",
+                            "delivered": "📦", "cancelled": "❌"
+                        }
+                        status_names = {
+                            "new": "Новый", "in_progress": "В работе", "ready": "Готов",
+                            "delivered": "Выдан", "cancelled": "Отменён"
+                        }
+                        
+                        text = f"<b>📋 Ваши заказы ({user['name']}):</b>\n\n"
+                        for order in orders:
+                            emoji = status_emoji.get(order["status"], "❓")
+                            status = status_names.get(order["status"], order["status"])
+                            text += f"{emoji} <b>#{order['id'][:8]}</b> - {status}\n"
+                            text += f"   💰 {order['total_price']} ₽ | 📅 {order['desired_date']}\n\n"
+                
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            
+            elif callback_data == "contact":
+                text = """
+<b>📞 Контакты</b>
+
+Для связи с нами:
+• Напишите в этот чат - мы ответим
+• Позвоните по телефону
+
+Мы работаем: Пн-Пт 9:00-18:00
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            
+            elif callback_data == "help":
+                text = """
+<b>❓ Помощь</b>
+
+<b>Как сделать заказ:</b>
+1. Нажмите "Новый заказ"
+2. Выберите тип сетки
+3. Перейдите на сайт для указания размеров
+4. Получайте уведомления о статусе
+
+<b>Типы сеток:</b>
+• Проёмная - для окон
+• Дверная - для дверей
+• Роллетная - сворачивающаяся
+
+<b>Типы полотна:</b>
+• Стандартное - базовое
+• Антипыль - мелкая ячейка
+• Антимошка - защита от мошек
+• Антикошка - усиленное
+"""
+                await edit_message_text(chat_id, message_id, text, reply_markup=build_back_keyboard())
+            
+            return {"ok": True}
+        
+        # Handle regular messages
         if "message" in data:
             message = data["message"]
             chat_id = message["chat"]["id"]
@@ -747,30 +939,21 @@ async def telegram_webhook(request: Request):
 
 Сервис заказа москитных сеток к вашим услугам.
 
-<b>Как сделать заказ:</b>
-1️⃣ Перейдите на сайт: {webapp_url}
-2️⃣ Зарегистрируйтесь, указав ваш Telegram ID
-3️⃣ Заполните форму заказа
-4️⃣ Получайте уведомления о статусе
-
 <b>Ваш Telegram ID:</b> <code>{chat_id}</code>
-(скопируйте и укажите при регистрации)
+<i>(укажите при регистрации для уведомлений)</i>
 
-<b>Команды:</b>
-/start - Начать работу
-/orders - Мои заказы
-/help - Справка
+Выберите действие:
 """
-                await send_telegram_message(chat_id, response_text)
+                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
             
             elif text == "/help":
                 response_text = """
 <b>Справка по боту</b>
 
-<b>Доступные команды:</b>
-/start - Начать работу
-/orders - Проверить статус заказов
-/help - Показать справку
+<b>Команды:</b>
+/start - Главное меню
+/orders - Мои заказы
+/help - Эта справка
 
 <b>Типы москитных сеток:</b>
 • Проёмная (наружная, внутренняя, встраиваемая)
@@ -779,25 +962,22 @@ async def telegram_webhook(request: Request):
 
 <b>Типы полотна:</b>
 • Стандартное
-• Антипыль
-• Антимошка
-• Антикошка
-
-Для оформления заказа используйте веб-форму на нашем сайте.
+• Антипыль (+500₽)
+• Антимошка (+300₽)
+• Антикошка (+800₽)
 """
-                await send_telegram_message(chat_id, response_text)
+                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
             
             elif text == "/orders":
-                # Find user by telegram_id
                 user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
                 if not user:
-                    response_text = """
+                    response_text = f"""
 <b>Аккаунт не найден</b>
 
-Для просмотра заказов необходимо зарегистрироваться на сайте и указать ваш Telegram ID.
+Для просмотра заказов зарегистрируйтесь на сайте и укажите ваш Telegram ID.
 
-<b>Ваш Telegram ID:</b> <code>{}</code>
-""".format(chat_id)
+<b>Ваш Telegram ID:</b> <code>{chat_id}</code>
+"""
                 else:
                     orders = await db.orders.find(
                         {"user_id": user["id"]}, 
@@ -805,24 +985,18 @@ async def telegram_webhook(request: Request):
                     ).sort("created_at", -1).limit(5).to_list(5)
                     
                     if not orders:
-                        response_text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ на нашем сайте!"
+                        response_text = "<b>У вас пока нет заказов</b>\n\nОформите первый заказ!"
                     else:
                         status_emoji = {
-                            "new": "🆕",
-                            "in_progress": "🔧",
-                            "ready": "✅",
-                            "delivered": "📦",
-                            "cancelled": "❌"
+                            "new": "🆕", "in_progress": "🔧", "ready": "✅",
+                            "delivered": "📦", "cancelled": "❌"
                         }
                         status_names = {
-                            "new": "Новый",
-                            "in_progress": "В работе",
-                            "ready": "Готов",
-                            "delivered": "Выдан",
-                            "cancelled": "Отменён"
+                            "new": "Новый", "in_progress": "В работе", "ready": "Готов",
+                            "delivered": "Выдан", "cancelled": "Отменён"
                         }
                         
-                        response_text = f"<b>Ваши заказы ({user['name']}):</b>\n\n"
+                        response_text = f"<b>📋 Ваши заказы ({user['name']}):</b>\n\n"
                         for order in orders:
                             emoji = status_emoji.get(order["status"], "❓")
                             status = status_names.get(order["status"], order["status"])
@@ -832,17 +1006,16 @@ async def telegram_webhook(request: Request):
                             response_text += f"   Статус: {status}\n"
                             response_text += f"   Дата: {order['desired_date']}\n\n"
                 
-                await send_telegram_message(chat_id, response_text)
+                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
             
             else:
-                # Unknown command
                 response_text = """
-Не понял команду. Используйте:
-/start - Начать работу
+Не понял команду. Используйте меню или команды:
+/start - Главное меню
 /orders - Мои заказы
 /help - Справка
 """
-                await send_telegram_message(chat_id, response_text)
+                await send_telegram_message(chat_id, response_text, reply_markup=build_main_menu_keyboard())
         
         return {"ok": True}
     except Exception as e:
