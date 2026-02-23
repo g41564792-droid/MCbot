@@ -373,29 +373,83 @@ class MosquitoNetAPITester:
         return success1 and success2 and success3 and success4 and success5
 
     def test_telegram_webhook(self):
-        """Test Telegram webhook endpoint"""
+        """Test Telegram webhook endpoint with all bot commands"""
         print("\n" + "="*50)
-        print("TESTING TELEGRAM WEBHOOK")
+        print("TESTING TELEGRAM WEBHOOK - ALL BOT COMMANDS")
         print("="*50)
         
-        # Test webhook with /start command
-        webhook_data = {
+        # Test /start command
+        start_webhook_data = {
             "message": {
                 "chat": {"id": 123456789},
                 "text": "/start",
-                "from": {"id": 123456789, "first_name": "Test"}
+                "from": {"id": 123456789, "first_name": "TestUser"}
             }
         }
         
-        success, result = self.run_test(
-            "Telegram Webhook /start",
+        success1, result1 = self.run_test(
+            "Telegram Bot /start command",
             "POST",
             "telegram/webhook",
             200,
-            webhook_data
+            start_webhook_data
         )
         
-        return success
+        # Test /help command  
+        help_webhook_data = {
+            "message": {
+                "chat": {"id": 123456789},
+                "text": "/help",
+                "from": {"id": 123456789, "first_name": "TestUser"}
+            }
+        }
+        
+        success2, result2 = self.run_test(
+            "Telegram Bot /help command",
+            "POST", 
+            "telegram/webhook",
+            200,
+            help_webhook_data
+        )
+        
+        # Test /orders command
+        orders_webhook_data = {
+            "message": {
+                "chat": {"id": 123456789},
+                "text": "/orders",
+                "from": {"id": 123456789, "first_name": "TestUser"}
+            }
+        }
+        
+        success3, result3 = self.run_test(
+            "Telegram Bot /orders command",
+            "POST",
+            "telegram/webhook", 
+            200,
+            orders_webhook_data
+        )
+        
+        # Test unknown command
+        unknown_webhook_data = {
+            "message": {
+                "chat": {"id": 123456789},
+                "text": "/unknown",
+                "from": {"id": 123456789, "first_name": "TestUser"}
+            }
+        }
+        
+        success4, result4 = self.run_test(
+            "Telegram Bot unknown command",
+            "POST",
+            "telegram/webhook",
+            200,
+            unknown_webhook_data
+        )
+        
+        if success1 and success2 and success3:
+            print("✅ All Telegram bot commands (/start, /help, /orders) working correctly")
+        
+        return success1 and success2 and success3 and success4
 
     def run_all_tests(self):
         """Run all tests in sequence"""
