@@ -652,7 +652,10 @@ async def update_order_status(
     
     result = await db.orders.find_one_and_update(
         {"id": order_id},
-        {"$set": {"status": data.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        {
+            "$set": {"status": data.status, "updated_at": datetime.now(timezone.utc).isoformat()},
+            "$push": {"status_history": {"status": data.status, "changed_at": datetime.now(timezone.utc).isoformat(), "changed_by": user["id"]}}
+        },
         return_document=True
     )
     if not result:
