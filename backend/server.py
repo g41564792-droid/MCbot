@@ -224,6 +224,24 @@ def calculate_item_price(item: OrderItem, settings: PriceSettings) -> float:
     
     return round(price * item.quantity, 2)
 
+# ===================== ORDER NUMBER GENERATION =====================
+
+async def generate_order_number() -> str:
+    """Генерация номера заказа в формате МС-0001"""
+    # Get current counter
+    counter = await db.counters.find_one_and_update(
+        {"_id": "order_number"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    seq = counter.get("seq", 1)
+    return f"МС-{seq:04d}"
+
+async def get_order_by_number(order_number: str):
+    """Найти заказ по номеру МС-XXXX"""
+    return await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+
 # ===================== TELEGRAM BOT =====================
 
 async def send_telegram_message(chat_id: int, text: str, parse_mode: str = "HTML", reply_markup: dict = None):
