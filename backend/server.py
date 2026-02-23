@@ -346,7 +346,7 @@ async def append_order_to_sheets(order: dict):
                     notes_parts.append(item["notes"])
                 
                 row = [
-                    order["id"][:8],  # ID заказа
+                    order.get("order_number", order["id"][:8]),  # Номер заказа МС-XXXX
                     order["created_at"][:10],  # Дата
                     order.get("user_name", ""),  # Клиент
                     order.get("contact_phone", order.get("user_phone", "")),  # Телефон
@@ -374,7 +374,7 @@ async def append_order_to_sheets(order: dict):
                 body=body
             ).execute()
             
-            logger.info(f"Order {order['id'][:8]} appended to Google Sheets")
+            logger.info(f"Order {order.get('order_number', order['id'][:8])} appended to Google Sheets")
         except Exception as e:
             logger.error(f"Failed to append order to Google Sheets: {e}")
     
