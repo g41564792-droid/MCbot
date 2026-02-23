@@ -529,14 +529,18 @@ async def create_order(data: OrderCreate, background_tasks: BackgroundTasks, use
         total_price += item_dict["item_price"]
         items_data.append(item_dict)
     
+    order_number = await generate_order_number()
+    
     order = {
         "id": str(uuid.uuid4()),
+        "order_number": order_number,
         "user_id": user["id"],
         "user_name": user["name"],
         "user_phone": user["phone"],
         "items": items_data,
         "total_price": round(total_price, 2),
         "status": "new",
+        "status_history": [{"status": "new", "changed_at": datetime.now(timezone.utc).isoformat()}],
         "desired_date": data.desired_date,
         "notes": data.notes,
         "contact_phone": data.contact_phone or user["phone"],
