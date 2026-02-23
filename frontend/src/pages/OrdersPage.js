@@ -1,19 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
+import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Skeleton } from '../components/ui/skeleton';
+import { 
+  Dialog, DialogContent, DialogDescription, DialogFooter, 
+  DialogHeader, DialogTitle 
+} from '../components/ui/dialog';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   ArrowLeft, Package, Calendar, Phone, FileText, 
-  ChevronRight, LogOut, ShoppingCart
+  ChevronRight, LogOut, ShoppingCart, Edit, X, MessageCircle
 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const TELEGRAM_BOT_URL = 'https://t.me/OlWait_MC_Bot';
 
 const STATUS_LABELS = {
   new: { label: 'Новый', class: 'status-new' },
@@ -25,9 +32,13 @@ const STATUS_LABELS = {
 
 const OrdersPage = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -47,6 +58,29 @@ const OrdersPage = () => {
   const handleLogout = () => {
     logout();
     window.location.href = '/';
+  };
+
+  const handleCancelOrder = async () => {
+    if (!orderToCancel) return;
+    setCancelling(true);
+    try {
+      await axios.delete(`${API}/orders/${orderToCancel.id}`);
+      toast.success('Заказ отменён');
+      fetchOrders();
+      setCancelDialogOpen(false);
+      setOrderToCancel(null);
+      setSelectedOrder(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Ошибка отмены заказа');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const openCancelDialog = (order, e) => {
+    e.stopPropagation();
+    setOrderToCancel(order);
+    setCancelDialogOpen(true);
   };
 
   return (
@@ -74,6 +108,40 @@ const OrdersPage = () => {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Telegram QR Code Card */}
+        <Card className="border-slate-200 mb-6 bg-gradient-to-r from-blue-50 to-cyan-50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-6">
+              <div className="bg-white p-3 rounded-xl shadow-sm">
+                <QRCodeSVG 
+                  value={TELEGRAM_BOT_URL} 
+                  size={100}
+                  level="M"
+                  includeMargin={false}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageCircle className="h-5 w-5 text-blue-600" />
+                  <h3 className="font-semibold text-slate-900">Telegram уведомления</h3>
+                </div>
+                <p className="text-sm text-slate-600 mb-3">
+                  Отсканируйте QR-код или перейдите по ссылке, чтобы получать уведомления о статусе заказов в Telegram
+                </p>
+                <a 
+                  href={TELEGRAM_BOT_URL} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  @OlWait_MC_Bot
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -136,13 +204,15 @@ const OrdersPage = () => {
                         </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-lg font-semibold font-mono text-blue-600">
-                        {order.total_price.toLocaleString()} ₽
+                    <div className="text-right flex items-start gap-2">
+                      <div>
+                        <div className="text-lg font-semibold font-mono text-blue-600">
+                          {order.total_price.toLocaleString()} ₽
+                        </div>
+                        <ChevronRight className={`h-5 w-5 text-slate-400 ml-auto transition-transform ${
+                          selectedOrder?.id === order.id ? 'rotate-90' : ''
+                        }`} />
                       </div>
-                      <ChevronRight className={`h-5 w-5 text-slate-400 ml-auto transition-transform ${
-                        selectedOrder?.id === order.id ? 'rotate-90' : ''
-                      }`} />
                     </div>
                   </div>
 
@@ -181,6 +251,28 @@ const OrdersPage = () => {
                           {order.notes}
                         </div>
                       )}
+
+                      {/* Actions for new orders */}
+                      {order.status === 'new' && (
+                        <div className="mt-4 pt-4 border-t border-slate-200 flex gap-3">
+                          <Link to={`/?edit=${order.id}`} onClick={(e) => e.stopPropagation()}>
+                            <Button variant="outline" size="sm" data-testid={`edit-order-${order.id.slice(0, 8)}`}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Редактировать
+                            </Button>
+                          </Link>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={(e) => openCancelDialog(order, e)}
+                            data-testid={`cancel-order-${order.id.slice(0, 8)}`}
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Отменить
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -189,6 +281,36 @@ const OrdersPage = () => {
           </div>
         )}
       </main>
+
+      {/* Cancel confirmation dialog */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Отменить заказ?</DialogTitle>
+            <DialogDescription>
+              Вы уверены, что хотите отменить заказ #{orderToCancel?.id?.slice(0, 8)}? 
+              Это действие нельзя будет отменить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setCancelDialogOpen(false)}
+              disabled={cancelling}
+            >
+              Нет, оставить
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleCancelOrder}
+              disabled={cancelling}
+              data-testid="confirm-cancel-btn"
+            >
+              {cancelling ? 'Отмена...' : 'Да, отменить'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
