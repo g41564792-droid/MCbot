@@ -979,8 +979,10 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                     "impost": i.get("impost", False), "impost_orientation": i.get("impost_orientation"), "notes": "", "item_price": i.get("price", 0)
                 } for i in items]
                 
+                order_number = await generate_order_number()
+                
                 order = {
-                    "id": str(uuid.uuid4()), "user_id": user["id"], "user_name": user["name"], "user_phone": od.get("phone", user.get("phone")),
+                    "id": str(uuid.uuid4()), "order_number": order_number, "user_id": user["id"], "user_name": user["name"], "user_phone": od.get("phone", user.get("phone")),
                     "items": order_items, "total_price": total, "status": "new",
                     "status_history": [{"status": "new", "changed_at": datetime.now(timezone.utc).isoformat()}],
                     "desired_date": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d"),
@@ -992,13 +994,17 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                 background_tasks.add_task(notify_admins_new_order, order)
                 await clear_tg_session(chat_id)
                 
-                await edit_message_text(chat_id, message_id, f"✅ <b>Заказ оформлен!</b>\n\n<b>№:</b> #{order['id'][:8]}\n<b>Сумма:</b> {total} ₽\n<b>Позиций:</b> {len(items)}\n\nМы свяжемся с вами!", reply_markup=build_main_menu_keyboard())
+                await edit_message_text(chat_id, message_id, f"✅ <b>Заказ оформлен!</b>\n\n<b>№:</b> {order_number}\n<b>Сумма:</b> {total} ₽\n<b>Позиций:</b> {len(items)}\n\nМы свяжемся с вами!", reply_markup=build_main_menu_keyboard())
             
             elif cbd == "add_more_items":
                 session = await get_tg_session(chat_id)
                 phone = session.get("order_data", {}).get("phone")
                 await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_TYPE, "order_data": {"phone": phone}})
                 await edit_message_text(chat_id, message_id, "<b>➕ Добавить позицию</b>\n\nВыберите тип:", reply_markup=build_order_type_keyboard())
+            
+            elif cbd == "track_order":
+                await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_ORDER_TRACK})
+                await edit_message_text(chat_id, message_id, "🔍 <b>Отследить заказ</b>\n\nВведите номер заказа:\n<i>Например: МС-0001</i>", reply_markup=build_cancel_keyboard())
             
             elif cbd == "my_orders":
                 user = await db.users.find_one({"telegram_id": chat_id}, {"_id": 0})
