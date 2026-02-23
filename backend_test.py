@@ -372,13 +372,13 @@ class MosquitoNetAPITester:
         
         return success1 and success2 and success3 and success4 and success5
 
-    def test_telegram_webhook(self):
-        """Test Telegram webhook endpoint with all bot commands"""
+    def test_telegram_inline_keyboards(self):
+        """Test Telegram inline keyboard functionality"""
         print("\n" + "="*50)
-        print("TESTING TELEGRAM WEBHOOK - ALL BOT COMMANDS")
+        print("TESTING TELEGRAM INLINE KEYBOARDS - NEW FEATURES")
         print("="*50)
         
-        # Test /start command
+        # Test /start command with inline keyboard
         start_webhook_data = {
             "message": {
                 "chat": {"id": 123456789},
@@ -388,12 +388,202 @@ class MosquitoNetAPITester:
         }
         
         success1, result1 = self.run_test(
-            "Telegram Bot /start command",
+            "Telegram /start command with inline keyboard",
             "POST",
             "telegram/webhook",
             200,
             start_webhook_data
         )
+        
+        if success1 and result1.get('ok'):
+            print("✅ /start command processed successfully - inline keyboard should be sent")
+        
+        # Test callback_query for main menu buttons
+        callback_queries = [
+            ("new_order", "New Order button callback"),
+            ("my_orders", "My Orders button callback"), 
+            ("contact", "Contact button callback"),
+            ("help", "Help button callback")
+        ]
+        
+        callback_results = []
+        for callback_data, description in callback_queries:
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_callback_{callback_data}",
+                    "data": callback_data,
+                    "message": {
+                        "chat": {"id": 123456789},
+                        "message_id": 123
+                    },
+                    "from": {"id": 123456789, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Callback Query - {description}",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            callback_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ {description} processed successfully")
+        
+        return success1 and all(callback_results)
+
+    def test_telegram_order_type_keyboard(self):
+        """Test order type selection via inline keyboard"""
+        print("\n" + "="*50)
+        print("TESTING ORDER TYPE SELECTION - INLINE KEYBOARD")
+        print("="*50)
+        
+        # Test order type callbacks
+        order_types = [
+            ("type_проемная_наружный", "Proemnaya Outer Type"),
+            ("type_проемная_внутренний", "Proemnaya Inner Type"),
+            ("type_проемная_встраиваемый", "Proemnaya Built-in Type"),
+            ("type_дверная", "Door Type"),
+            ("type_роллетная", "Roller Type")
+        ]
+        
+        type_results = []
+        for callback_data, description in order_types:
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_type_{callback_data}",
+                    "data": callback_data,
+                    "message": {
+                        "chat": {"id": 123456789},
+                        "message_id": 124
+                    },
+                    "from": {"id": 123456789, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Order Type Selection - {description}",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            type_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ {description} selection processed successfully")
+        
+        # Test mesh type callbacks
+        mesh_types = [
+            ("mesh_стандартное", "Standard Mesh"),
+            ("mesh_антипыль", "Anti-dust Mesh"),
+            ("mesh_антимошка", "Anti-mosquito Mesh"),
+            ("mesh_антикошка", "Anti-cat Mesh")
+        ]
+        
+        mesh_results = []
+        for callback_data, description in mesh_types:
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_mesh_{callback_data}",
+                    "data": callback_data,
+                    "message": {
+                        "chat": {"id": 123456789},
+                        "message_id": 125
+                    },
+                    "from": {"id": 123456789, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Mesh Type Selection - {description}",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            mesh_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ {description} selection processed successfully")
+        
+        # Test navigation callbacks
+        nav_callbacks = [
+            ("back_main", "Back to Main Menu"),
+            ("back_type", "Back to Type Selection")
+        ]
+        
+        nav_results = []
+        for callback_data, description in nav_callbacks:
+            callback_webhook_data = {
+                "callback_query": {
+                    "id": f"test_nav_{callback_data}",
+                    "data": callback_data,
+                    "message": {
+                        "chat": {"id": 123456789},
+                        "message_id": 126
+                    },
+                    "from": {"id": 123456789, "first_name": "TestUser"}
+                }
+            }
+            
+            success, result = self.run_test(
+                f"Navigation - {description}",
+                "POST",
+                "telegram/webhook",
+                200,
+                callback_webhook_data
+            )
+            
+            nav_results.append(success)
+            if success and result.get('ok'):
+                print(f"✅ {description} navigation processed successfully")
+        
+        return all(type_results) and all(mesh_results) and all(nav_results)
+
+    def test_push_notifications_on_status_change(self):
+        """Test push notifications when admin changes order status"""
+        print("\n" + "="*50)
+        print("TESTING PUSH NOTIFICATIONS ON STATUS CHANGE")
+        print("="*50)
+        
+        if not self.admin_token or not self.created_order_id:
+            print("⚠️ Skipping push notification test - need admin token and order")
+            return True
+        
+        # Test different status updates to trigger notifications
+        status_updates = [
+            ("in_progress", "In Progress Status Update"),
+            ("ready", "Ready Status Update"), 
+            ("delivered", "Delivered Status Update")
+        ]
+        
+        notification_results = []
+        for status, description in status_updates:
+            success, result = self.run_test(
+                f"Push Notification - {description}",
+                "PUT",
+                f"admin/orders/{self.created_order_id}/status",
+                200,
+                {"status": status},
+                use_admin=True
+            )
+            
+            notification_results.append(success)
+            if success:
+                print(f"✅ {description} - Status updated, push notification should be sent")
+                if 'status' in result:
+                    print(f"   New status confirmed: {result['status']}")
+        
+        return all(notification_results)
+
+    def test_telegram_webhook(self):
+        """Test basic Telegram webhook functionality"""
+        print("\n" + "="*50)
+        print("TESTING BASIC TELEGRAM WEBHOOK COMMANDS")
+        print("="*50)
         
         # Test /help command  
         help_webhook_data = {
@@ -404,7 +594,7 @@ class MosquitoNetAPITester:
             }
         }
         
-        success2, result2 = self.run_test(
+        success1, result1 = self.run_test(
             "Telegram Bot /help command",
             "POST", 
             "telegram/webhook",
@@ -421,7 +611,7 @@ class MosquitoNetAPITester:
             }
         }
         
-        success3, result3 = self.run_test(
+        success2, result2 = self.run_test(
             "Telegram Bot /orders command",
             "POST",
             "telegram/webhook", 
@@ -438,7 +628,7 @@ class MosquitoNetAPITester:
             }
         }
         
-        success4, result4 = self.run_test(
+        success3, result3 = self.run_test(
             "Telegram Bot unknown command",
             "POST",
             "telegram/webhook",
@@ -446,10 +636,7 @@ class MosquitoNetAPITester:
             unknown_webhook_data
         )
         
-        if success1 and success2 and success3:
-            print("✅ All Telegram bot commands (/start, /help, /orders) working correctly")
-        
-        return success1 and success2 and success3 and success4
+        return success1 and success2 and success3
 
     def run_all_tests(self):
         """Run all tests in sequence"""
