@@ -694,7 +694,12 @@ const OrderFormPage = () => {
                     data-testid="submit-order-btn"
                   >
                     {loading ? (
-                      <span className="animate-pulse">Оформление...</span>
+                      <span className="animate-pulse">{isEditMode ? 'Сохранение...' : 'Оформление...'}</span>
+                    ) : isEditMode ? (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Сохранить изменения
+                      </>
                     ) : (
                       <>
                         <Send className="h-4 w-4 mr-2" />
@@ -704,6 +709,41 @@ const OrderFormPage = () => {
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* Telegram QR Code */}
+              {!isEditMode && (
+                <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-blue-50 to-cyan-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-white p-2 rounded-lg shadow-sm">
+                        <QRCodeSVG 
+                          value={TELEGRAM_BOT_URL} 
+                          size={72}
+                          level="M"
+                          includeMargin={false}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <MessageCircle className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-slate-900">Telegram</span>
+                        </div>
+                        <p className="text-xs text-slate-600 mb-1">
+                          Уведомления о статусе заказа
+                        </p>
+                        <a 
+                          href={TELEGRAM_BOT_URL} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          @OlWait_MC_Bot
+                        </a>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </div>
