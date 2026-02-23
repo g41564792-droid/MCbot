@@ -6,14 +6,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Contact phone number
+CONTACT_PHONE = "+375333545588"
+
 # Telegram Bot Order Flow States
 class TelegramOrderState:
     IDLE = "idle"
     AWAITING_TYPE = "awaiting_type"
     AWAITING_MESH = "awaiting_mesh"
-    AWAITING_WIDTH = "awaiting_width"
-    AWAITING_HEIGHT = "awaiting_height"
-    AWAITING_QUANTITY = "awaiting_quantity"
+    AWAITING_DIMENSIONS = "awaiting_dimensions"  # Combined: width height quantity
     AWAITING_COLOR = "awaiting_color"
     AWAITING_RAL = "awaiting_ral"
     AWAITING_MOUNTING = "awaiting_mounting"
@@ -21,6 +22,7 @@ class TelegramOrderState:
     AWAITING_IMPOST_ORIENTATION = "awaiting_impost_orientation"
     AWAITING_PHONE = "awaiting_phone"
     AWAITING_CONFIRM = "awaiting_confirm"
+    AWAITING_ORDER_TRACK = "awaiting_order_track"  # For tracking orders
 
 # Inline keyboard builders
 def build_main_menu_keyboard():
@@ -28,7 +30,8 @@ def build_main_menu_keyboard():
         "inline_keyboard": [
             [{"text": "🛒 Новый заказ", "callback_data": "new_order"}],
             [{"text": "📋 Мои заказы", "callback_data": "my_orders"}],
-            [{"text": "📞 Связаться", "callback_data": "contact"}, {"text": "❓ Помощь", "callback_data": "help"}]
+            [{"text": "🔍 Отследить заказ", "callback_data": "track_order"}],
+            [{"text": "📞 Позвонить", "url": f"tel:{CONTACT_PHONE}"}, {"text": "❓ Помощь", "callback_data": "help"}]
         ]
     }
 
