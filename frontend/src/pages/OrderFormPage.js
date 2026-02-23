@@ -85,6 +85,8 @@ const defaultItem = () => ({
 
 const OrderFormPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editOrderId = searchParams.get('edit');
   const { user, isAdmin } = useAuth();
   const [items, setItems] = useState([defaultItem()]);
   const [desiredDate, setDesiredDate] = useState(addDays(new Date(), 1));
@@ -93,6 +95,58 @@ const OrderFormPage = () => {
   const [prices, setPrices] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+
+  // Load order for editing
+  useEffect(() => {
+    if (editOrderId && user) {
+      loadOrderForEdit(editOrderId);
+    }
+  }, [editOrderId, user]);
+
+  const loadOrderForEdit = async (orderId) => {
+    try {
+      const res = await axios.get(`${API}/orders/${orderId}`);
+      const order = res.data;
+      
+      if (order.status !== 'new') {
+        toast.error('Редактирование возможно только для новых заказов');
+        navigate('/orders');
+        return;
+      }
+      
+      setEditingOrder(order);
+      setIsEditMode(true);
+      
+      // Load items
+      const loadedItems = order.items.map((item, idx) => ({
+        id: Date.now() + idx,
+        installation_type: item.installation_type,
+        width: item.width.toString(),
+        height: item.height.toString(),
+        quantity: item.quantity,
+        color: item.color.startsWith('ral_') ? 'ral' : item.color,
+        ral_color_description: item.color.startsWith('ral_') ? item.color.replace('ral_', '') : '',
+        mounting_type: item.mounting_type,
+        mounting_by_manufacturer: item.mounting_by_manufacturer,
+        mesh_type: item.mesh_type,
+        impost: item.impost,
+        impost_orientation: item.impost_orientation || 'вертикально',
+        notes: item.notes || '',
+      }));
+      
+      setItems(loadedItems);
+      setDesiredDate(parseISO(order.desired_date));
+      setOrderNotes(order.notes || '');
+      setContactPhone(order.contact_phone || '');
+      
+      toast.info('Редактирование заказа #' + orderId.slice(0, 8));
+    } catch (err) {
+      toast.error('Не удалось загрузить заказ');
+      navigate('/orders');
+    }
+  };
 
   // Calculate prices
   useEffect(() => {
