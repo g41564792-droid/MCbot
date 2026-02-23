@@ -942,7 +942,7 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                     await edit_message_text(chat_id, message_id, "⚠️ <b>Рекомендуется импост</b>\n(размер > 1200 мм)\n\nДобавить?", reply_markup=build_yes_no_keyboard("impost"))
                 else:
                     await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.mounting_type": mount, "order_data.impost": False})
-                    await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+                    await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+375295012233</i>", reply_markup=build_cancel_keyboard())
             
             elif cbd == "impost_yes":
                 await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_IMPOST_ORIENTATION, "order_data.impost": True})
@@ -950,12 +950,12 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
             
             elif cbd == "impost_no":
                 await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.impost": False})
-                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+375295012233</i>", reply_markup=build_cancel_keyboard())
             
             elif cbd.startswith("impost_") and cbd not in ["impost_yes", "impost_no"]:
                 orient = cbd.replace("impost_", "")
                 await update_tg_session(chat_id, {"state": TelegramOrderState.AWAITING_PHONE, "order_data.impost_orientation": orient})
-                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+79991234567</i>", reply_markup=build_cancel_keyboard())
+                await edit_message_text(chat_id, message_id, "📱 <b>Введите телефон</b>\n\n<i>+375295012233</i>", reply_markup=build_cancel_keyboard())
             
             elif cbd == "confirm_order":
                 session = await get_tg_session(chat_id)
