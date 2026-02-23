@@ -35,6 +35,17 @@ def build_main_menu_keyboard():
         ]
     }
 
+def build_after_order_keyboard(order_number: str):
+    """Клавиатура после оформления заказа"""
+    return {
+        "inline_keyboard": [
+            [{"text": f"📋 Посмотреть заказ {order_number}", "callback_data": f"view_order_{order_number}"}],
+            [{"text": "📋 Все мои заказы", "callback_data": "my_orders"}],
+            [{"text": "🛒 Новый заказ", "callback_data": "new_order"}],
+            [{"text": "🏠 Главное меню", "callback_data": "back_main"}]
+        ]
+    }
+
 def build_order_type_keyboard():
     return {
         "inline_keyboard": [
