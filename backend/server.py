@@ -94,6 +94,7 @@ class OrderResponse(BaseModel):
     items: List[OrderItem]
     total_price: float
     status: str  # new, in_progress, ready, delivered, cancelled
+    status_history: Optional[List[dict]] = None  # История изменений статусов
     desired_date: str
     notes: Optional[str] = None
     contact_phone: Optional[str] = None
