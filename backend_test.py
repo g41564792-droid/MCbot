@@ -1448,7 +1448,12 @@ class MosquitoNetAPITester:
             self.test_telegram_quantity_validation,
             self.test_color_selection_by_installation_type,
             self.test_impost_recommendation_logic,
-            self.test_status_history_tracking
+            self.test_status_history_tracking,
+            # NEW FEATURE TESTS
+            self.test_order_number_generation,
+            self.test_combined_dimensions_input,
+            self.test_order_tracking_by_number,
+            self.test_contact_button_tel_link
         ]
         
         for test in tests:
