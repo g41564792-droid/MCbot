@@ -13,6 +13,9 @@ from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
 import httpx
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -26,6 +29,10 @@ db = client[os.environ['DB_NAME']]
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 JWT_SECRET = os.environ.get('JWT_SECRET', 'mosquito-net-secret-key-2024')
 JWT_ALGORITHM = "HS256"
+
+# Google Sheets configuration
+GOOGLE_CREDENTIALS_FILE = os.environ.get('GOOGLE_CREDENTIALS_FILE', '')
+GOOGLE_SPREADSHEET_ID = os.environ.get('GOOGLE_SPREADSHEET_ID', '')
 
 # Create the main app
 app = FastAPI(title="Москитные Сетки API")
