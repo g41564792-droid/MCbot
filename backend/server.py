@@ -740,3 +740,6 @@ async def create_default_admin():
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info("Default admin user created: phone=admin, password=admin123")
+    
+    # Setup Google Sheets header
+    await setup_sheets_header()
