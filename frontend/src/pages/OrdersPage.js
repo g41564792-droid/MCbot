@@ -123,10 +123,10 @@ const OrdersPage = () => {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <MessageCircle className="h-5 w-5 text-blue-600" />
-                  <h3 className="font-semibold text-slate-900">Telegram уведомления</h3>
+                  <h3 className="font-semibold text-slate-900">Telegram бот</h3>
                 </div>
                 <p className="text-sm text-slate-600 mb-3">
-                  Отсканируйте QR-код или перейдите по ссылке, чтобы получать уведомления о статусе заказов в Telegram
+                  Оформляйте заказы и получайте уведомления о статусе прямо в Telegram
                 </p>
                 <a 
                   href={TELEGRAM_BOT_URL} 
