@@ -462,8 +462,9 @@ async def create_order(data: OrderCreate, background_tasks: BackgroundTasks, use
     
     await db.orders.insert_one(order)
     
-    # Notify admins
+    # Notify admins and add to Google Sheets
     background_tasks.add_task(notify_admins_new_order, order)
+    background_tasks.add_task(append_order_to_sheets, order)
     
     return OrderResponse(**order)
 
