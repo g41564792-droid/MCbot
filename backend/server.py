@@ -103,6 +103,11 @@ class OrderResponse(BaseModel):
 class OrderStatusUpdate(BaseModel):
     status: str
 
+class StatusHistoryEntry(BaseModel):
+    status: str
+    changed_at: str
+    changed_by: Optional[str] = None  # admin user id
+
 class PriceSettings(BaseModel):
     base_price_per_sqm: float = 2500  # за квадратный метр
     door_type_multiplier: float = 1.3
@@ -115,6 +120,24 @@ class PriceSettings(BaseModel):
     mounting_z_bracket: float = 200
     mounting_metal_hooks: float = 150
     mounting_plastic_hooks: float = 100
+
+# Telegram Bot Order Flow States
+class TelegramOrderState:
+    """Состояния для flow заказа в Telegram"""
+    IDLE = "idle"
+    AWAITING_TYPE = "awaiting_type"
+    AWAITING_MESH = "awaiting_mesh"
+    AWAITING_WIDTH = "awaiting_width"
+    AWAITING_HEIGHT = "awaiting_height"
+    AWAITING_QUANTITY = "awaiting_quantity"
+    AWAITING_COLOR = "awaiting_color"
+    AWAITING_RAL = "awaiting_ral"
+    AWAITING_MOUNTING = "awaiting_mounting"
+    AWAITING_IMPOST = "awaiting_impost"
+    AWAITING_IMPOST_ORIENTATION = "awaiting_impost_orientation"
+    AWAITING_PHONE = "awaiting_phone"
+    AWAITING_CONFIRM = "awaiting_confirm"
+    AWAITING_MORE_ITEMS = "awaiting_more_items"
 
 # ===================== AUTH HELPERS =====================
 
