@@ -622,6 +622,10 @@ async def update_order_status(
     if data.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
+    # Get old status for comparison
+    old_order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    old_status = old_order.get("status") if old_order else None
+    
     result = await db.orders.find_one_and_update(
         {"id": order_id},
         {"$set": {"status": data.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
@@ -630,18 +634,55 @@ async def update_order_status(
     if not result:
         raise HTTPException(status_code=404, detail="Заказ не найден")
     
-    # Notify customer
-    customer = await db.users.find_one({"id": result["user_id"]}, {"_id": 0})
-    if customer and customer.get("telegram_id"):
-        status_names = {
-            "new": "Новый",
-            "in_progress": "В работе",
-            "ready": "Готов к выдаче",
-            "delivered": "Выдан",
-            "cancelled": "Отменён"
-        }
-        text = f"<b>Статус заказа #{order_id[:8]} изменён</b>\n\nНовый статус: {status_names.get(data.status, data.status)}"
-        background_tasks.add_task(send_telegram_message, customer["telegram_id"], text)
+    # Send push notification to customer via Telegram
+    if old_status != data.status:
+        customer = await db.users.find_one({"id": result["user_id"]}, {"_id": 0})
+        if customer and customer.get("telegram_id"):
+            status_emoji = {
+                "new": "🆕", "in_progress": "🔧", "ready": "✅",
+                "delivered": "📦", "cancelled": "❌"
+            }
+            status_names = {
+                "new": "Новый",
+                "in_progress": "В работе",
+                "ready": "Готов к выдаче",
+                "delivered": "Выдан",
+                "cancelled": "Отменён"
+            }
+            
+            emoji = status_emoji.get(data.status, "📋")
+            status_name = status_names.get(data.status, data.status)
+            
+            # Build detailed notification
+            items_summary = ", ".join([f"{i['width']}×{i['height']}" for i in result["items"][:3]])
+            if len(result["items"]) > 3:
+                items_summary += f" и ещё {len(result['items']) - 3}"
+            
+            text = f"""
+{emoji} <b>Статус заказа обновлён!</b>
+
+<b>Заказ:</b> #{order_id[:8]}
+<b>Новый статус:</b> {status_name}
+<b>Сумма:</b> {result['total_price']} ₽
+<b>Позиции:</b> {items_summary}
+"""
+            if data.status == "ready":
+                text += "\n✅ <b>Ваш заказ готов к выдаче!</b>\nСвяжитесь с нами для получения."
+            elif data.status == "in_progress":
+                text += "\n🔧 <b>Ваш заказ принят в работу!</b>\nОжидайте уведомления о готовности."
+            elif data.status == "delivered":
+                text += "\n📦 <b>Заказ выдан!</b>\nСпасибо за заказ! Будем рады видеть вас снова."
+            elif data.status == "cancelled":
+                text += "\n❌ <b>Заказ отменён.</b>\nЕсли у вас есть вопросы, свяжитесь с нами."
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "📋 Все мои заказы", "callback_data": "my_orders"}],
+                    [{"text": "🛒 Новый заказ", "callback_data": "new_order"}]
+                ]
+            }
+            
+            background_tasks.add_task(send_telegram_message, customer["telegram_id"], text, "HTML", keyboard)
     
     # Exclude _id from response
     result.pop("_id", None)
