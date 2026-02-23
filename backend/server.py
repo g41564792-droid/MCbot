@@ -88,6 +88,7 @@ class OrderCreate(BaseModel):
 class OrderResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
+    order_number: Optional[str] = None  # МС-0001, МС-0002, etc.
     user_id: str
     user_name: Optional[str] = None
     user_phone: Optional[str] = None
