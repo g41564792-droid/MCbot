@@ -31,7 +31,7 @@ def build_main_menu_keyboard():
             [{"text": "🛒 Новый заказ", "callback_data": "new_order"}],
             [{"text": "📋 Мои заказы", "callback_data": "my_orders"}],
             [{"text": "🔍 Отследить заказ", "callback_data": "track_order"}],
-            [{"text": "📞 Позвонить", "url": f"tel:{CONTACT_PHONE}"}, {"text": "❓ Помощь", "callback_data": "help"}]
+            [{"text": "📞 Контакты", "callback_data": "contact"}, {"text": "❓ Помощь", "callback_data": "help"}]
         ]
     }
 

@@ -1044,6 +1044,9 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
                             text += f"{STATUS_EMOJI.get(o['status'], '❓')} <b>{on}</b> - {STATUS_NAMES.get(o['status'], o['status'])}\n   💰 {o['total_price']} ₽\n\n"
                 await edit_message_text(chat_id, message_id, text, reply_markup=build_main_menu_keyboard())
             
+            elif cbd == "contact":
+                await edit_message_text(chat_id, message_id, f"<b>📞 Контакты</b>\n\n<b>Телефон:</b> +375333545588\n\nПозвоните или напишите нам!", reply_markup=build_main_menu_keyboard())
+            
             elif cbd == "help":
                 await edit_message_text(chat_id, message_id, "<b>❓ Помощь</b>\n\n<b>Как заказать:</b>\n1. Новый заказ\n2. Тип сетки\n3. Полотно\n4. Размеры (ширина высота кол-во)\n5. Цвет и крепление\n6. Подтвердить\n\n<b>Размеры:</b> 150-3000 мм\n<b>Кол-во:</b> 1-30 шт\n\n<b>Отследить заказ:</b> кнопка 🔍", reply_markup=build_main_menu_keyboard())
             
